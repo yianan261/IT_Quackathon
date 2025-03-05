@@ -14,4 +14,4 @@ env/
 .idea/
 
 *.db
-+ dump.rdb
+dump.rdb
