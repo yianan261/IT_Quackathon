@@ -11,5 +11,13 @@ services:
       - COSMOSDB_URI=${COSMOSDB_URI}
       - COSMOSDB_KEY=${COSMOSDB_KEY}
       - COSMOSDB_DATABASE=${COSMOSDB_DATABASE}
+      - REDIS_HOST=redis
     volumes:
-      - .:/app
+      - ./backend:/app/backend
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"

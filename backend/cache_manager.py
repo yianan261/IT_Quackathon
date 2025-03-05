@@ -14,19 +14,17 @@ class CacheManager:
 
     def __init__(self):
         try:
-            self.redis_client = redis.Redis(
-                host='localhost',
-                port=6379,
-                db=0,
-                decode_responses=
-                True  
-            )
-            self.redis_client.ping()
+            self.redis_client = redis.Redis(host='localhost',
+                                            port=6379,
+                                            db=0,
+                                            decode_responses=True)
+            if not self.redis_client.ping():
+                logging.warning("Redis ping failed, running without cache")
+                self.redis_client = None
         except redis.ConnectionError:
-            logging.error(
-                "Could not connect to Redis. Make sure Redis server is running."
-            )
-            raise
+            logging.warning(
+                "Could not connect to Redis. Running without cache.")
+            self.redis_client = None
         except Exception as e:
             logging.error(f"Error initializing Redis client: {str(e)}")
             raise
