@@ -1,6 +1,25 @@
+# Virtual Environment
+myenv/
+venv/
+env/
+
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
 .env
 .env.local
 .env.development
 .env.production
-myenv
-myenv.*
+
+.docker/
+
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Database
+*.db
