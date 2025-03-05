@@ -9,6 +9,7 @@ venv/
 env/
 
 .docker/
+.dockerignore
 
 .vscode/
 .idea/
