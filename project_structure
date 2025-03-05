@@ -1,0 +1,17 @@
+stevens-ai-assistant/
+├── backend/
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── api/
+│   │   │   ├── __init__.py
+│   │   │   ├── chat.py
+│   │   │   ├── canvas.py
+│   │   │   └── workday.py
+│   │   ├── core/
+│   │   │   ├── __init__.py
+│   │   │   └── config.py
+│   │   ├── services/
+│   │   └── utils/
+│   ├── requirements.txt
+│   └── main.py
+└── README.md 
