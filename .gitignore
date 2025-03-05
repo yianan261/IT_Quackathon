@@ -4,8 +4,14 @@
 .env.production
 myenv
 myenv.*
+myenv/
+venv/
+env/
 
 .docker/
 
 .vscode/
 .idea/
+
+*.db
++ dump.rdb
