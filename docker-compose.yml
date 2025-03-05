@@ -1,0 +1,15 @@
+version: "3.8"
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - CANVAS_API_URL=${CANVAS_API_URL}
+      - CANVAS_API_KEY=${CANVAS_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - COSMOSDB_URI=${COSMOSDB_URI}
+      - COSMOSDB_KEY=${COSMOSDB_KEY}
+      - COSMOSDB_DATABASE=${COSMOSDB_DATABASE}
+    volumes:
+      - .:/app
