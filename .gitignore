@@ -4,3 +4,8 @@
 .env.production
 myenv
 myenv.*
+
+.docker/
+
+.vscode/
+.idea/
