@@ -116,11 +116,13 @@ class CanvasService:
             )
             return []
 
-    def get_assignments_for_course(self, course: Union[str, int]) -> Dict:
+    def get_assignments_for_course(
+            self, course: Union[str, int, List[Dict]]) -> Dict:
         """Get assignments for a specific course or courses"""
         logger.info(f"=====Getting assignments for course: {course}====")
         try:
             course_infos = []
+            # the course could be string, int, or list of course dicts
             if isinstance(course, str):
                 course_infos = self._extract_course_identifier(course)
                 logger.info(f"======Course info: {course_infos}=======")
