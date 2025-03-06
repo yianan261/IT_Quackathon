@@ -58,6 +58,12 @@ async def chat(request: ChatRequest,
 
         conversation_history = request.messages.copy()
         model_response = model_service.generate_response(request.messages)
+        if not isinstance(model_response, dict):
+            logger.error(
+                f"Unexpected model response type: {type(model_response)}. Response: {model_response}"
+            )
+            return ChatResponse(response="Unexpected response from model.")
+
         logger.info(
             f"\nInitial LLM response: {json.dumps(model_response, indent=2)}")
 
@@ -70,7 +76,16 @@ async def chat(request: ChatRequest,
             logger.info(f"Processing function call attempt {attempts}")
 
             function_name = model_response["function"]
-            arguments = json.loads(model_response["arguments"])
+            try:
+                arguments = model_response["arguments"]
+                if isinstance(arguments, str):
+                    arguments = json.loads(arguments)
+            except json.JSONDecodeError as e:
+                logger.error(
+                    f"Error parsing arguments: {str(e)}. Arguments: {model_response['arguments']}"
+                )
+                return ChatResponse(response="Invalid arguments.")
+
             logger.info(
                 f"Function call: {function_name} with arguments: {arguments}")
 
@@ -93,32 +108,34 @@ async def chat(request: ChatRequest,
 
             # Get all upcoming assignments for all courses
             elif function_name == "get_upcoming_courses_assignments":
-                courses = canvas_service.get_current_courses()
                 all_assignments = []
+                try:
+                    all_assignments = canvas_service.get_upcoming_assignments()
 
-                for course in courses:
-                    assignments = canvas_service.get_assignments_for_course(
-                        course['id'])
-                    if assignments:
-                        all_assignments.append({
-                            "course_name":
-                            course["name"],
-                            "assignments": [{
-                                "name":
-                                assignment["name"],
-                                "due_at":
-                                assignment["due_at"],
-                                "points_possible":
-                                assignment["points_possible"],
-                                "has_submitted":
-                                assignment["has_submitted_submissions"]
-                            } for assignment in assignments]
-                        })
+                    if all_assignments:
+                        function_result = canvas_service.format_assignments_response(
+                            all_assignments)
+                        logger.info(
+                            f"Formatted assignments: {function_result}")
+                    else:
+                        function_result = f"No assignments found for {course_identifier}."
+                        logger.info("No assignments found")
+                except Exception as e:
+                    logger.error(
+                        f"Error getting upcoming assignments: {str(e)}")
 
                 if all_assignments:
-                    function_result = {"courses": all_assignments}
+                    try:
+                        function_result = canvas_service.format_assignments_response(
+                            {"courses": all_assignments})
+                        logger.info(
+                            f"Formatted all assignments: {function_result}")
+                    except Exception as e:
+                        logger.error(f"Error formatting assignments: {str(e)}")
+                        function_result = "Error formatting assignments."
                 else:
                     function_result = "No upcoming assignments found in any courses."
+                    logger.info("No assignments found in any courses")
 
             elif function_name == "get_academic_calendar_event":
                 # Search vector store or db for calendar events
@@ -131,17 +148,22 @@ async def chat(request: ChatRequest,
                 function_result = await stevens_service.get_program_requirements(
                     program_name)
 
-            # add function result to the conversation history
+            # Add function result to conversation history
+            function_result_str = json.dumps(function_result) if isinstance(
+                function_result, (dict, list)) else function_result
+
             conversation_history.append(
-                ChatMessage(role="assistant", content=str(function_result)))
+                ChatMessage(role="assistant", content=function_result_str))
 
             model_response = model_service.generate_response(
-                conversation_history, function_result)
+                conversation_history, function_result_str)
             logger.info(f"Next LLM response: {model_response}")
 
         if isinstance(model_response, dict):
-            model_response = f"Error: Unable to process request after {max_attempts} attempts"
-
+            return ChatResponse(
+                response=
+                f"Error: Unable to process request after {max_attempts} attempts"
+            )
         return ChatResponse(response=model_response)
 
     except Exception as e:
