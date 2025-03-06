@@ -100,7 +100,7 @@ class ModelService:
                         "You are a helpful assistant with access to Stevens Institute of Technology information. "
                         "Use the following context to answer the question, but respond naturally and conversationally. "
                         f"\n\nContext: {function_result}\n\n"
-                        "Please summarize it for the user in a clear and concise manner."
+                        "Please summarize it for the user in a clear and concise manner. Please use some emojis to make it more engaging."
                     )
                 formatted_messages.append({
                     "role": "system",

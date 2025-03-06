@@ -1,13 +1,15 @@
 import os
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Optional, Any, Union
 import logging
 import json
 import re
 from app.core.config import settings
+from openai import OpenAI
+from tzlocal import get_localzone
+from zoneinfo import ZoneInfo
 
-# Configure logging
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -19,11 +21,7 @@ class CanvasService:
     def __init__(self):
         self.base_url = settings.CANVAS_API_URL
         self.headers = {"Authorization": f"Bearer {settings.CANVAS_API_KEY}"}
-        logger.info(f"CanvasService initialized with URL: {self.base_url!r}"
-                    )  # !r shows quotes
-        logger.info(f"Using API key: {settings.CANVAS_API_KEY[:5]}..."
-                    )  # Show first 5 chars
-        logger.info(f"Headers configured: {self.headers}")
+        self.client = OpenAI()
 
     def get_current_courses(self) -> List[Dict]:
         """Get list of current courses"""
@@ -56,50 +54,84 @@ class CanvasService:
             logger.error(f"Error getting upcoming assignments: {str(e)}")
             return []
 
-    def extract_course_identifier(self, query: str) -> Optional[int]:
-        """
-        Use LLM to understand which course the user is referring to in their query
-        Gets the course ID, which is used to get the assignments for the course
-        Returns the course identifier (ID) or None if no course is mentioned
-        """
-        courses = self.get_current_courses()
-        if not courses:
-            logger.error("No courses retrieved from Canvas API")
-            return None
-        logger.info(f"Available courses for matching: {courses}")
-        course_context = "\n".join([
-            f"{course['name']} ({course.get('course_code', '')})"
-            for course in courses
-        ])
-        logger.info(f"Course context for LLM: {course_context}")
-
-        # Prepare prompt for LLM
-        prompt = f"""
-        Given the following list of courses:
-        {course_context}
-
-        And the user query:
-        "{query}"
-
-        Which course code (if any) is the user referring to? Return ONLY the corresponding course id `id` and course name `name` if found
-        in json format, or "None" if no such course is found.
-        Do not include any other text in your response.
-        """
-
-        from app.services.model_service import ModelService
-        model = ModelService()
-        response = model.get_completion(prompt)
-
+    def extract_course_identifier(self, query: str) -> List[Dict[str, Any]]:
+        """Extract course IDs from query using available courses. Returns a list of matches."""
         try:
-            response = response.strip()
-            if response.lower() == "none":
-                return None
-            course_info = json.loads(response)
-            logger.info(f"Course info: {course_info}")
-            return {"id": int(course_info["id"]), "name": course_info["name"]}
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
-            logger.error(f"Error parsing course info: {str(e)}")
-            return None
+            courses = self.get_current_courses()
+            course_context = "\n".join([
+                f"Course ID: {course['id']}, Name: {course['name']}, Code: {course.get('course_code', '')}"
+                for course in courses
+            ])
+            logger.info(f"Course context for LLM: {course_context}")
+
+            prompt = f"""
+            Given the following list of courses:
+            {course_context}
+
+            And the user query:
+            "{query}"
+
+            Find ALL courses that match the query. Return a JSON array of objects with exact numerical course IDs and full course names.
+            The course IDs must be the complete numerical IDs from the course listing.
+
+            Example format for matches: [
+                {{"id": 78280, "name": "2025S EE 553-A"}},
+                {{"id": 78275, "name": "2025S CS 505-WS/EE 605-WS"}}
+            ]
+            Example format for no matches: []
+
+            Rules:
+            1. Match on course name, code, or subject matter (e.g., "C++" should match "Engineering Programming: C++")
+            2. The IDs must be the full numerical IDs from the course listing
+            3. Return ONLY the JSON array, no other text
+            4. If multiple courses are mentioned (e.g., "C++ and probability"), return all matching courses
+            IMPORTANT: You MUST return ALL courses that match any part of the user query.
+            """
+
+            messages = [{
+                "role":
+                "system",
+                "content":
+                "You are a course matching assistant. Return ONLY the JSON array with exact numerical IDs."
+            }, {
+                "role": "user",
+                "content": prompt
+            }]
+
+            response = self.client.chat.completions.create(
+                model="gpt-3.5-turbo", messages=messages,
+                temperature=0.1).choices[0].message.content
+
+            try:
+                response = response.strip()
+                course_list = json.loads(response)
+                if not course_list:
+                    logger.info("No matching courses found")
+                    return []
+
+                validated_courses = []
+                for course_info in course_list:
+                    course_id = int(course_info["id"])
+                    if any(course["id"] == course_id for course in courses):
+                        validated_courses.append({
+                            "id": course_id,
+                            "name": course_info["name"]
+                        })
+                    else:
+                        logger.warning(
+                            f"Course ID {course_id} not found in course list")
+                logger.info(
+                    f"****Successfully matched courses: {validated_courses}****"
+                )
+                return validated_courses
+
+            except (json.JSONDecodeError, KeyError, ValueError) as e:
+                logger.error(f"Error parsing course info: {str(e)}")
+                return []
+
+        except Exception as e:
+            logger.error(f"Error extracting course identifier: {str(e)}")
+            return []
 
     def find_course_by_name(self, search_term: str) -> Dict:
         """find a course by partial name match"""
@@ -160,119 +192,165 @@ class CanvasService:
             )
             return []
 
-    def get_assignments_for_course(self, course: Union[str,
-                                                       int]) -> List[Dict]:
-        """Get assignments for a specific course
-        Identifies course by course identifier string or course ID
-        """
-        course_id = None  # Initialize course_id at the start
+    def get_assignments_for_course(self, course: Union[str, int]) -> Dict:
+        """Get assignments for a specific course or courses"""
+        logger.info(f"=====Getting assignments for course: {course}====")
         try:
-            course_info = None
+            course_infos = []
             if isinstance(course, str):
-                course_info = self.extract_course_identifier(course)
-                if not course_info:
+                course_infos = self.extract_course_identifier(course)
+                logger.info(f"======Course info: {course_infos}=======")
+                if not course_infos:
                     logger.warning(
                         f"No course ID found for identifier: {course}")
-                    return []
-                course_id = course_info["id"]
+                    return {"courses": []}
             else:
                 course_id = course
-                # Get course info for the ID
                 courses = self.get_current_courses()
                 course_info = next(
                     (c for c in courses if c["id"] == course_id), None)
                 if course_info:
-                    course_info = {
+                    course_infos = [{
                         "id": course_id,
                         "name": course_info["name"]
-                    }
+                    }]
 
-            response = requests.get(
-                f"{self.base_url}/courses/{course_id}/assignments",
-                headers=self.headers)
+            local_tz = get_localzone()
+            logger.info(f"Using local timezone: {local_tz}")
 
-            response.raise_for_status()
+            all_courses_assignments = []
+            for course_info in course_infos:
+                course_id = course_info["id"]
+                logger.info(
+                    f"======Processing assignments for course {course_info['name']} with ID {course_id}===="
+                )
+                url = f"{self.base_url}/courses/{course_id}/assignments"
+                logger.info(f"Fetching assignments from: {url}")
 
-            url = f"{self.base_url}/courses/{course_id}/assignments"
-            logger.info(f"Fetching assignments from: {url}")
+                response = requests.get(url,
+                                        headers=self.headers,
+                                        params={"include[]": ["submission"]})
 
-            response = requests.get(url, headers=self.headers)
+                if response.status_code != 200:
+                    logger.error(
+                        f"Error response for assignments: {response.text}")
+                    continue
 
-            logger.info(f"Assignment request status: {response.status_code}")
+                assignments = response.json()
+                logger.info(f"Retrieved {len(assignments)} total assignments")
 
-            if response.status_code != 200:
-                logger.error(
-                    f"Error response for assignments: {response.text}")
-                return []
+                now = datetime.now(timezone.utc)
+                two_weeks_from_now = now + timedelta(weeks=2)
 
-            assignments = response.json()
-            logger.info(f"Retrieved {len(assignments)} total assignments")
+                upcoming_assignments = []
+                for assignment in assignments:
+                    due_at = assignment.get('due_at')
+                    if due_at:
+                        try:
+                            due_date_utc = datetime.fromisoformat(
+                                due_at.replace('Z', '+00:00'))
+                            # Convert to local timezone
+                            due_date_local = due_date_utc.astimezone(local_tz)
 
-            now = datetime.now(timezone.utc)
+                            if now <= due_date_utc <= two_weeks_from_now:
+                                assignment_info = {
+                                    'name':
+                                    assignment.get('name'),
+                                    'due_at':
+                                    due_date_local.isoformat(),
+                                    'points_possible':
+                                    assignment.get('points_possible'),
+                                    'html_url':
+                                    assignment.get('html_url'),
+                                    'description':
+                                    assignment.get('description')
+                                }
+                                logger.info(
+                                    f"Found upcoming assignment: {assignment_info['name']} due at {due_date_local}"
+                                )
+                                upcoming_assignments.append(assignment_info)
+                        except ValueError as e:
+                            logger.error(
+                                f"Error parsing date {due_at}: {str(e)}")
 
-            # filter for upcoming assignments
-            upcoming_assignments = []
-            for assignment in assignments:
-                name = assignment.get('name', None)
-                due_at = assignment.get('due_at', None)
-                unlock_at = assignment.get('unlock_at')
-                points_possible = assignment.get('points_possible', None)
-                has_submitted = assignment.get('has_submitted_submissions',
-                                               False)
+                upcoming_assignments.sort(key=lambda x: x['due_at'])
 
-                is_unlocked = unlock_at is None or datetime.fromisoformat(
-                    unlock_at.replace('Z', '+00:00')) <= now
-
-                if due_at and is_unlocked and not assignment.get(
-                        'locked_for_user', False):
-                    try:
-                        due_date = datetime.fromisoformat(
-                            due_at.replace('Z', '+00:00'))
-
-                        #  include if due date is in the future
-                        if due_date > now:
-                            logger.info(
-                                f"Found upcoming assignment: {assignment.get('name')} due at {due_at}"
-                            )
-                            upcoming_assignments.append(assignment)
-                    except ValueError as e:
-                        logger.error(f"Error parsing date {due_at}: {str(e)}")
-
-            upcoming_assignments.sort(key=lambda x: x['due_at'])
+                all_courses_assignments.append({
+                    "course_name":
+                    course_info["name"],
+                    "assignments":
+                    upcoming_assignments
+                })
 
             logger.info(
-                f"Filtered to {len(upcoming_assignments)} upcoming assignments"
+                f"Retrieved assignments for {len(all_courses_assignments)} courses"
             )
-            return {
-                "course name":
-                course_info["name"] if course_info else f"Course {course_id}",
-                "assignments": upcoming_assignments
-            }
+            return {"courses": all_courses_assignments}
 
         except Exception as e:
             logger.error(
                 f"Error fetching assignments for course {course}: {str(e)}")
-            return []
+            return {"courses": []}
 
-    def format_assignments_response(self, assignments: List[Dict],
-                                    course_name: str) -> str:
-        logger.info(
-            f"Formatting {len(assignments)} assignments for {course_name}")
-        if not assignments:
-            return f"No upcoming assignments found for {course_name}."
+    def format_assignments_response(self,
+                                    assignments_data: Optional[Dict],
+                                    course_name: str = None) -> str:
+        """Format assignments response with error handling"""
+        try:
+            if not assignments_data or not isinstance(assignments_data, dict):
+                return "No assignment information available."
 
-        response = f"Upcoming assignments for {course_name}:\n\n"
-        for assignment in assignments:
-            due_at = datetime.fromisoformat(assignment['due_at'].replace(
-                'Z', '+00:00'))
+            all_courses = assignments_data.get("courses", [])
+            if not all_courses:
+                return "No upcoming assignments found for any of the specified courses."
 
-            response += f"📝 {assignment['name']}\n"
-            response += f"   Due: {due_at.strftime('%B %d, %Y at %I:%M %p')}\n"
-            if assignment.get('points_possible'):
-                response += f"   Points: {assignment['points_possible']}\n"
-            if assignment.get('html_url'):
-                response += f"   Link: {assignment['html_url']}\n"
-            response += "\n"
+            response_parts = []
+            for course in all_courses:
+                if not isinstance(course, dict):
+                    continue
 
-        logger.debug(f"Formatted response: {response}")
-        return response
+                course_name = course.get("course_name", "Unknown Course")
+                assignments = course.get("assignments", [])
+
+                if not assignments:
+                    response_parts.append(
+                        f"No upcoming assignments found for {course_name}.")
+                    continue
+
+                response_parts.append(
+                    f"📚 Upcoming assignments for {course_name}:")
+                for assignment in assignments:
+                    try:
+                        due_at = datetime.fromisoformat(
+                            assignment.get('due_at', ''))
+                        assignment_parts = []
+                        assignment_parts.append(
+                            f" - 📝 {assignment.get('name', 'Unnamed Assignment')}"
+                        )
+                        assignment_parts.append(
+                            f"   Due: {due_at.strftime('%B %d, %Y at %I:%M %p %Z')}"
+                        )
+
+                        points = assignment.get('points_possible')
+                        if points is not None:
+                            assignment_parts.append(f"   Points: {points}")
+
+                        url = assignment.get('html_url')
+                        if url:
+                            assignment_parts.append(f"   Link: {url}")
+
+                        response_parts.append("\n".join(assignment_parts))
+                    except (ValueError, AttributeError) as e:
+                        logger.error(f"Error formatting assignment: {str(e)}")
+                        continue
+
+            if not response_parts:
+                return "No assignments to display."
+
+            response = "\n\n".join(response_parts)
+            logger.debug(f"Formatted response: {response}")
+            return response
+
+        except Exception as e:
+            logger.error(f"Error formatting assignments response: {str(e)}")
+            return "Error retrieving assignment information."
