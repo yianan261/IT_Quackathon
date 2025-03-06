@@ -47,7 +47,7 @@ def extract_course_reference(message: str) -> str:
 @router.post("/")
 async def chat(request: ChatRequest,
                services: dict = Depends(get_service_context)):
-    """chat endpoints that allow model to invoke services functions"""
+    """Chat endpoint that allows model to invoke services functions"""
     try:
         user_message = request.messages[-1].content
         logger.info(
@@ -56,7 +56,6 @@ async def chat(request: ChatRequest,
         canvas_service = services["canvas_service"]
         stevens_service = services["stevens_service"]
 
-        # Keep track of the conversation history
         conversation_history = request.messages.copy()
         model_response = model_service.generate_response(request.messages)
         logger.info(
@@ -76,22 +75,23 @@ async def chat(request: ChatRequest,
                 f"Function call: {function_name} with arguments: {arguments}")
 
             function_result = None
-            # get course assignments for a specific course
+
             if function_name == "get_course_assignments":
-                course_id = arguments["course_identifier"]
-                logger.info(f"Getting assignments for course ID: {course_id}")
+                course_identifier = arguments["course_identifier"]
+                logger.info(
+                    f"Getting assignments for course : {course_identifier}")
                 assignments = canvas_service.get_assignments_for_course(
-                    course_id)
+                    course_identifier)
                 logger.info(f"Got assignments response: {assignments}")
                 if assignments:
                     function_result = canvas_service.format_assignments_response(
-                        assignments.get("assignments"),
-                        assignments.get("course name"))
+                        assignments)
                     logger.info(f"Formatted assignments: {function_result}")
                 else:
-                    function_result = f"No assignments found for {course_id}."
+                    function_result = f"No assignments found for {course_identifier}."
                     logger.info("No assignments found")
-            # get all upcoming assignments for all courses
+
+            # Get all upcoming assignments for all courses
             elif function_name == "get_upcoming_courses_assignments":
                 courses = canvas_service.get_current_courses()
                 all_assignments = []
@@ -131,7 +131,7 @@ async def chat(request: ChatRequest,
                 function_result = await stevens_service.get_program_requirements(
                     program_name)
 
-            # Add the function result to the conversation history
+            # add function result to the conversation history
             conversation_history.append(
                 ChatMessage(role="assistant", content=str(function_result)))
 
