@@ -58,11 +58,11 @@ async def chat(request: ChatRequest,
 
         conversation_history = request.messages.copy()
         model_response = model_service.generate_response(request.messages)
-        if not isinstance(model_response, dict):
-            logger.error(
-                f"Unexpected model response type: {type(model_response)}. Response: {model_response}"
-            )
-            return ChatResponse(response="Unexpected response from model.")
+
+        if not isinstance(
+                model_response,
+                dict):  # model responds naturally without function ca
+            return ChatResponse(response=model_response)
 
         logger.info(
             f"\nInitial LLM response: {json.dumps(model_response, indent=2)}")
@@ -76,15 +76,10 @@ async def chat(request: ChatRequest,
             logger.info(f"Processing function call attempt {attempts}")
 
             function_name = model_response["function"]
-            try:
-                arguments = model_response["arguments"]
-                if isinstance(arguments, str):
-                    arguments = json.loads(arguments)
-            except json.JSONDecodeError as e:
-                logger.error(
-                    f"Error parsing arguments: {str(e)}. Arguments: {model_response['arguments']}"
-                )
-                return ChatResponse(response="Invalid arguments.")
+
+            arguments = json.loads(model_response["arguments"]) if isinstance(
+                model_response["arguments"],
+                str) else model_response["arguments"]
 
             logger.info(
                 f"Function call: {function_name} with arguments: {arguments}")
