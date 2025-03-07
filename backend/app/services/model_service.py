@@ -20,54 +20,68 @@ class ModelService:
         self.client = OpenAI()
         self.model = "gpt-3.5-turbo"
 
-        self.functions = [{
-            "name": "get_course_assignments",
-            "description": "Get upcoming assignments for a specific course",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "course_identifier": {
-                        "type":
-                        "string",
-                        "description":
-                        "Course code or name (e.g., 'EE 553', 'C++', 'Programming')"
+        self.tools = [{
+            "type": "function",
+            "function": {
+                "name": "get_course_assignments",
+                "description":
+                "Get upcoming assignments for a specific course",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "course_identifier": {
+                            "type":
+                            "string",
+                            "description":
+                            "Course code or name (e.g., 'EE 553', 'C++', 'Programming')"
+                        }
                     }
                 }
             }
         }, {
-            "name": "get_upcoming_courses_assignments",
-            "description": "Get upcoming assignments for all enrolled courses",
-            "parameters": {
-                "type": "object",
-                "properties": {}
+            "type": "function",
+            "function": {
+                "name": "get_upcoming_courses_assignments",
+                "description":
+                "Get upcoming assignments for all enrolled courses",
+                "parameters": {
+                    "type": "object",
+                    "properties": {}
+                }
             }
         }, {
-            "name": "get_academic_calendar_event",
-            "description":
-            "Get information about academic calendar events (like spring break, semester start/end dates, etc)",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "event_type": {
-                        "type":
-                        "string",
-                        "description":
-                        "Type of academic calendar event (e.g., 'spring break', 'finals week', 'semester start')"
+            "type": "function",
+            "function": {
+                "name": "get_academic_calendar_event",
+                "description":
+                "Get information about academic calendar events (like spring break, semester start/end dates, etc)",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "event_type": {
+                            "type":
+                            "string",
+                            "description":
+                            "Type of academic calendar event (e.g., 'spring break', 'finals week', 'semester start')"
+                        }
                     }
                 }
             }
         }, {
-            "name": "get_program_requirements",
-            "description":
-            "Get course requirements for a specific degree program",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "program": {
-                        "type":
-                        "string",
-                        "description":
-                        "Degree program name (e.g., 'AAI masters', 'Computer Science PhD')"
+            "type": "function",
+            "function": {
+                "name": "get_program_requirements",
+                "description":
+                "Get course requirements for a specific degree program",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "program": {
+                            "type":
+                            "string",
+                            "description":
+                            "Degree program name (e.g., 'AAI masters', 'Computer Science PhD')"
+                        }
                     }
                 }
             }
@@ -105,19 +119,21 @@ class ModelService:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=formatted_messages,
-                functions=self.functions,
-                function_call="auto",
+                tools=self.tools,
+                tool_choice="auto",
                 temperature=0.7,
                 max_tokens=500)
 
             response_message = response.choices[0].message
             if hasattr(response_message,
-                       "function_call") and response_message.function_call:
+                       "tool_calls") and response_message.tool_calls:
                 return {
-                    "function": response_message.function_call.name,
-                    "arguments": response_message.function_call.arguments
+                    "function": response_message.tool_calls[0].function.name,
+                    "arguments":
+                    response_message.tool_calls[0].function.arguments
                 }
-            # if no function call, return the response content (string)
+
+            # if no function/tool call, return the response content (string)
             return response_message.content
 
         except Exception as e:
