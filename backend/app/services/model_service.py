@@ -86,22 +86,17 @@ class ModelService:
             } for msg in messages]
 
             if function_result:
-                if isinstance(function_result, dict):
-                    formatted_context = json.dumps(function_result, indent=2)
-                    readable_context = (
-                        "You are a helpful assistant with access to Stevens Institute of Technology information. "
-                        "Use the following context to answer the question, but respond naturally and conversationally. "
-                        f"\n\nContext: {formatted_context}\n\n"
-                        "Please summarize it for the user in a clear and concise manner."
-                    )
+                formatted_context = json.dumps(
+                    function_result, indent=2) if isinstance(
+                        function_result, dict) else function_result
+                readable_context = (
+                    "You are a helpful assistant with access to Stevens Institute of Technology information. "
+                    "Use the following context to answer the question, but respond naturally and conversationally. "
+                    f"\n\nContext: {formatted_context}\n\n"
+                    "Please summarize it for the user in a clear and concise manner. Please use some emojis to make it more engaging.\
+                        Also include some words of encouragement and motivation to the user (keep it short), who is a student at Stevens Institute of Technology."
+                )
 
-                else:
-                    readable_context = (
-                        "You are a helpful assistant with access to Stevens Institute of Technology information. "
-                        "Use the following context to answer the question, but respond naturally and conversationally. "
-                        f"\n\nContext: {function_result}\n\n"
-                        "Please summarize it for the user in a clear and concise manner. Please use some emojis to make it more engaging."
-                    )
                 formatted_messages.append({
                     "role": "system",
                     "content": readable_context
