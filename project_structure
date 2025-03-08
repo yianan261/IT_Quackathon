@@ -2,6 +2,9 @@ stevens-ai-assistant/
 ├── backend/
 │   ├── app/
 │   │   ├── __init__.py
+|   |   ├── context.py
+|   |   ├── db 
+|   |   │   └── database.py
 │   │   ├── api/
 │   │   │   ├── __init__.py
 │   │   │   ├── chat.py
@@ -11,7 +14,13 @@ stevens-ai-assistant/
 │   │   │   ├── __init__.py
 │   │   │   └── config.py
 │   │   ├── services/
+│   │   │   ├── scraper.py
+│   │   │   ├── model_service.py
+│   │   │   ├── canvas_service.py
+│   │   │   └── workday_service.py
 │   │   └── utils/
+│   │       ├── __init__.py
+│   │       └── logger.py
 │   ├── requirements.txt
 │   └── main.py
 └── README.md 

@@ -1,14 +1,16 @@
 # Stevens AI Assistant
 
-## Quick Start with Docker
+## Quick Start with Docker (Development)
 
 1. Clone the repository:
+
 ```bash
 git clone git@github.com:yianan261/IT_Quackathon.git
 cd IT_Quackathon
 ```
 
 2. Create a `.env` file with your credentials:
+
 ```env
 CANVAS_API_URL=https://sit.instructure.com/api/v1/
 CANVAS_API_KEY=your_canvas_key
@@ -19,6 +21,7 @@ COSMOSDB_DATABASE=stevens-ai
 ```
 
 3. Build and run with Docker Compose:
+
 ```bash
 docker-compose up --build
 ```
@@ -28,6 +31,7 @@ docker-compose up --build
 ## Testing the API
 
 Test the chat endpoint:
+
 ```bash
 curl -X POST http://localhost:8000/api/chat \
 -H "Content-Type: application/json" \
@@ -38,24 +42,23 @@ curl -X POST http://localhost:8000/api/chat \
   }]
 }'
 ```
-Alternatively the test.py currently has a Python script to test the LLM chat endpoints
-```bash
-python test.py
-```
 
-## Development
+Alternatively test on Postman
 
-To run without Docker:
+### To run without Docker:
 
 1. Install dependencies:
+
 ```bash
 pip install -r requirements.txt
 ```
 
 2. Run the server:
+
 ```bash
 uvicorn main:app --reload
 ```
-```
 
+### Project Structure
 
+See project structure file (subject to updates)
