@@ -30,7 +30,6 @@ class ChatResponse(BaseModel):
 
 def extract_course_reference(message: str) -> str:
     """Extract potential course name from message"""
-    # Common patterns for course references
     patterns = [
         r"(?:in|for|my|the)\s+([a-zA-Z\s]+(?:class|course))",
         r"(?:in|for|my|the)\s+([a-zA-Z\s]+)\s+(?:class|course)",
@@ -55,6 +54,7 @@ async def chat(request: ChatRequest, services: dict = Depends(get_service_contex
         stevens_service = services["stevens_service"]
 
         conversation_history = request.messages.copy()
+        # Initial call: no current_function provided
         model_response = model_service.generate_response(request.messages)
 
         if not isinstance(model_response, dict):
@@ -118,18 +118,15 @@ async def chat(request: ChatRequest, services: dict = Depends(get_service_contex
                     logger.info("No assignments found in any courses")
 
             elif function_name == "get_academic_calendar_event":
-                # Search vector store or db for calendar events
                 function_result = await stevens_service.get_calendar_event(arguments.get("event_type", ""))
 
             elif function_name == "get_program_requirements":
-                # Search vector store/db for program requirements
                 program_name = arguments["program"]
                 function_result = await stevens_service.get_program_requirements(program_name)
 
             elif function_name == "get_announcements_for_all_courses":
                 logger.info("Getting announcements for all courses")
                 announcements = canvas_service.get_announcements_for_all_courses()
-                # announcements = canvas_service.format_announcements_response(announcements)
                 logger.info(f"Got announcements response: {announcements}")
                 if announcements:
                     function_result = announcements
@@ -137,7 +134,6 @@ async def chat(request: ChatRequest, services: dict = Depends(get_service_contex
                     function_result = "No announcements found for your courses."
 
             elif function_name == "get_announcements_for_specific_courses":
-                # Mimic the logic of get_course_assignments for announcements
                 course_identifier = arguments["course_identifier"]
                 logger.info(f"Getting announcements for course: {course_identifier}")
                 announcements = canvas_service.get_announcements_for_course(course_identifier)
@@ -154,7 +150,8 @@ async def chat(request: ChatRequest, services: dict = Depends(get_service_contex
 
             conversation_history.append(ChatMessage(role="assistant", content=function_result_str))
 
-            model_response = model_service.generate_response(conversation_history, function_result_str)
+            # Pass the current function name along with function_result to generate_response
+            model_response = model_service.generate_response(conversation_history, function_result_str, current_function=function_name)
             logger.info(f"Next LLM response: {model_response}")
 
         if isinstance(model_response, dict):
