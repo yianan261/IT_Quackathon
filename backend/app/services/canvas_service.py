@@ -352,6 +352,8 @@ class CanvasService:
                     })
                 results.append({
                     "course_name": course_name,
+                    "course_announcements_link": f"https://sit.instructure.com/courses/{course_id}/announcements",
+
                     "announcements": ann_list
                 })
             return {"courses": results}
