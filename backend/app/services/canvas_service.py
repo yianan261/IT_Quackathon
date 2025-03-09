@@ -211,7 +211,7 @@ class CanvasService:
                         logger.error(f"Error formatting assignment: {str(e)}")
                         continue
             if not response_parts:
-                return "No upcoming assignments are currently listed for your courses. 📚✨"
+                return "No upcoming assignments are curren tly listed for your courses. 📚✨"
             return "\n\n".join(response_parts)
         except Exception as e:
             logger.error(f"Error formatting assignments response: {str(e)}")
