@@ -110,7 +110,7 @@ async def test_canvas_annoucements():
     Retrieves announcements for the specified course ID.
     """
     announcements = canvas.get_announcements_for_all_courses()
-    announcements = canvas.format_announcements_response(announcements)
+    # announcements = canvas.format_announcements_response(announcements)
     return {
         
         "announcements": announcements
