@@ -77,6 +77,30 @@ class ModelService:
                     },
                 },
             },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_announcements_for_all_courses",
+                    "description": "Get announcements for all enrolled courses, generally if you do not get course ids or name, you would call this function",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_announcements_for_specific_courses",
+                    "description": "Get announcements for specific courses",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "course_identifier": {
+                                "type": "string",
+                                "description": "Course code or name (e.g., 'EE 553', 'C++', 'Programming'), could be a list of courses",
+                            }
+                        },
+                    },
+                },
+            },
         ]
 
     def generate_response(
@@ -101,7 +125,11 @@ class ModelService:
                     "Use the following context to answer the question, but respond naturally and conversationally. "
                     f"\n\nContext: {formatted_context}\n\n"
                     "Please summarize it for the user in a clear and concise manner. Please use some emojis to make it more engaging.\
-                        Also include some words of encouragement and motivation to the user (keep it short), who is a student at Stevens Institute of Technology."
+                    Also include some words of encouragement and motivation to the user (keep it short), who is a student at Stevens Institute of Technology."
+                  
+                  
+                  
+                   
                 )
 
                 formatted_messages.append(

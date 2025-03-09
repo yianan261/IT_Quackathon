@@ -102,18 +102,18 @@ async def get_calendar_events(service: dict = Depends(get_service_context)):
 
 # get annoucements
 # method : get
-# https://sit.instructure.com/api/v1/courses/{course id}/discussion_topics?only_announcements=true&per_page=40&page=1
-@app.get("/test/canvas/annoucements/{course_id}")
-async def test_canvas_annoucements(course_id: int):
+
+@app.get("/test/canvas/annoucements")
+async def test_canvas_annoucements():
     """
     Test endpoint for Canvas announcements API.
     Retrieves announcements for the specified course ID.
     """
-    announcements = canvas.get_announcements_for_course(course_id)
+    announcements = canvas.get_announcements_for_all_courses()
+    announcements = canvas.format_announcements_response(announcements)
     return {
-        "course_id": course_id,
-        "announcements_count": len(announcements),
-        "announcements": announcements,
+        
+        "announcements": announcements
     }
 
 

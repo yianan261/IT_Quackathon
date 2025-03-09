@@ -11,7 +11,8 @@ from tzlocal import get_localzone
 from zoneinfo import ZoneInfo
 
 logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -47,9 +48,7 @@ class CanvasService:
         """Get upcoming assignments for all courses"""
         try:
             all_courses = self.get_current_courses()
-            course_infos = [
-                {"id": course["id"], "name": course["name"]} for course in all_courses
-            ]
+            course_infos = [{"id": course["id"], "name": course["name"]} for course in all_courses]
             assignments = self.get_assignments_for_course(course_infos)
             return assignments["courses"] if "courses" in assignments else assignments
         except Exception as e:
@@ -99,9 +98,7 @@ class CanvasService:
             logger.info(f"Retrieved {len(assignments)} raw assignments")
             return assignments
         except Exception as e:
-            logger.error(
-                f"Error fetching raw assignments for course {course_id}: {str(e)}"
-            )
+            logger.error(f"Error fetching raw assignments for course {course_id}: {str(e)}")
             return []
 
     def get_assignments_for_course(self, course: Union[str, int, List[Dict]]) -> Dict:
@@ -128,14 +125,10 @@ class CanvasService:
             all_courses_assignments = []
             for course_info in course_infos:
                 course_id = course_info["id"]
-                logger.info(
-                    f"======Processing assignments for course {course_info['name']} with ID {course_id}===="
-                )
+                logger.info(f"======Processing assignments for course {course_info['name']} with ID {course_id}====")
                 url = f"{self.base_url}/courses/{course_id}/assignments"
                 logger.info(f"Fetching assignments from: {url}")
-                response = requests.get(
-                    url, headers=self.headers, params={"include[]": ["submission"]}
-                )
+                response = requests.get(url, headers=self.headers, params={"include[]": ["submission"]})
                 if response.status_code != 200:
                     logger.error(f"Error response for assignments: {response.text}")
                     continue
@@ -149,9 +142,7 @@ class CanvasService:
                     due_at = assignment.get("due_at")
                     if due_at:
                         try:
-                            due_date_utc = datetime.fromisoformat(
-                                due_at.replace("Z", "+00:00")
-                            )
+                            due_date_utc = datetime.fromisoformat(due_at.replace("Z", "+00:00"))
                             # Convert to local timezone
                             due_date_local = due_date_utc.astimezone(local_tz)
                             if now <= due_date_utc <= two_weeks_from_now:
@@ -162,22 +153,16 @@ class CanvasService:
                                     "html_url": assignment.get("html_url"),
                                     "description": assignment.get("description"),
                                 }
-                                logger.info(
-                                    f"Found upcoming assignment: {assignment_info['name']} due at {due_date_local}"
-                                )
+                                logger.info(f"Found upcoming assignment: {assignment_info['name']} due at {due_date_local}")
                                 upcoming_assignments.append(assignment_info)
                         except ValueError as e:
                             logger.error(f"Error parsing date {due_at}: {str(e)}")
                 upcoming_assignments.sort(key=lambda x: x["due_at"])
-                all_courses_assignments.append(
-                    {
-                        "course_name": course_info["name"],
-                        "assignments": upcoming_assignments,
-                    }
-                )
-            logger.info(
-                f"Retrieved assignments for {len(all_courses_assignments)} courses"
-            )
+                all_courses_assignments.append({
+                    "course_name": course_info["name"],
+                    "assignments": upcoming_assignments,
+                })
+            logger.info(f"Retrieved assignments for {len(all_courses_assignments)} courses")
             return {"courses": all_courses_assignments}
         except Exception as e:
             logger.error(f"Error fetching assignments for course {course}: {str(e)}")
@@ -201,10 +186,7 @@ class CanvasService:
                     continue
                 response_parts.append(f"\n📚 {course_name}")
                 # Sort assignments by due date
-                assignments = sorted(
-                    [a for a in assignments if a.get("due_at")],
-                    key=lambda x: x.get("due_at"),
-                )
+                assignments = sorted([a for a in assignments if a.get("due_at")], key=lambda x: x.get("due_at"))
                 logger.info(f"*****Sorted assignments: {assignments}*****")
                 for assignment in assignments:
                     try:
@@ -213,9 +195,7 @@ class CanvasService:
                         points = assignment.get("points_possible")
                         url = assignment.get("html_url")
                         if due_at:
-                            due_date = datetime.fromisoformat(
-                                due_at.replace("Z", "+00:00")
-                            )
+                            due_date = datetime.fromisoformat(due_at.replace("Z", "+00:00"))
                             local_tz = get_localzone()
                             due_date = due_date.astimezone(local_tz)
                             assignment_parts = [
@@ -244,12 +224,10 @@ class CanvasService:
             if not courses:
                 logger.warning("No courses found")
                 return []
-            course_context = "\n".join(
-                [
-                    f"Course ID: {course['id']}, Name: {course['name']}, Code: {course.get('course_code', '')}"
-                    for course in courses
-                ]
-            )
+            course_context = "\n".join([
+                f"Course ID: {course['id']}, Name: {course['name']}, Code: {course.get('course_code', '')}"
+                for course in courses
+            ])
             logger.info(f"Course context for LLM: {course_context}")
             prompt = f"""
             Given the following list of courses:
@@ -274,20 +252,16 @@ class CanvasService:
             4. If multiple courses are mentioned (e.g., "C++ and probability"), return all matching courses
             IMPORTANT: You MUST return ALL courses that match any part of the user query.
             """
-            messages = [
-                {
+            messages = [{
                     "role": "system",
-                    "content": "You are a course matching assistant. Return ONLY the JSON array.",
-                },
-                {"role": "user", "content": prompt},
-            ]
-            response = (
-                self.client.chat.completions.create(
+                    "content": "You are a course matching assistant. Return ONLY the JSON array."
+                }, {
+                    "role": "user",
+                    "content": prompt
+                }]
+            response = self.client.chat.completions.create(
                     model="gpt-3.5-turbo", messages=messages, temperature=0.3
-                )
-                .choices[0]
-                .message.content
-            )
+                ).choices[0].message.content
             try:
                 response = response.strip()
                 course_list = json.loads(response)
@@ -296,11 +270,10 @@ class CanvasService:
                 if not course_list:
                     logger.info("No matching courses found")
                     return []
-                validated_courses = [
-                    {"id": int(course["id"]), "name": course["name"]}
-                    for course in course_list
-                    if any(c["id"] == int(course["id"]) for c in courses)
-                ]
+                validated_courses = [{
+                        "id": int(course["id"]),
+                        "name": course["name"]
+                    } for course in course_list if any(c["id"] == int(course["id"]) for c in courses)]
                 logger.info(f"****Successfully matched courses: {validated_courses}****")
                 return validated_courses
             except (json.JSONDecodeError, KeyError, ValueError) as e:
@@ -317,7 +290,7 @@ class CanvasService:
         Parameters:
             course (Union[int, str, List[Dict]]):
                 - If an integer, represents a single course ID;
-                - If a string, represents course name or keyword (will be parsed via _extract_course_identifier);
+                - If a string, represents a course name or keyword (will be parsed via _extract_course_identifier);
                 - If a list, it should be a list of course dictionaries (each must contain at least "id" and "name").
 
         Returns:
@@ -329,7 +302,7 @@ class CanvasService:
                       - message: Announcement content (usually HTML)
         """
         try:
-            # Determine course list based on the type of input parameter
+            # Determine the course list based on the input parameter type
             course_infos = []
             if isinstance(course, str):
                 course_infos = self._extract_course_identifier(course)
@@ -381,8 +354,29 @@ class CanvasService:
                     "course_name": course_name,
                     "announcements": ann_list
                 })
-                logger.info(f"Retrieved {len(ann_list)} announcements for course {course_id}")
             return {"courses": results}
         except Exception as e:
             logger.error(f"Error fetching announcements for course {course}: {str(e)}", exc_info=True)
             return {"courses": []}
+
+    def get_announcements_for_all_courses(self) -> Dict:
+        """
+        Get announcements for all current courses.
+
+        This function retrieves all current courses via get_current_courses,
+        then calls get_announcements_for_course with the list of courses to get
+        announcements for each course.
+
+        Returns:
+            Dict: In the format {"courses": [ { "course_name": ..., "announcements": [ {...}, ... ] }, ... ] }.
+        """
+        try:
+            all_courses = self.get_current_courses()
+            course_infos = [{"id": course["id"], "name": course["name"]} for course in all_courses]
+            announcements = self.get_announcements_for_course(course_infos)
+            return announcements
+        except Exception as e:
+            logger.error(f"Error fetching announcements for all courses: {str(e)}")
+            return {"courses": []}
+
+ 
