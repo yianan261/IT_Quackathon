@@ -13,108 +13,128 @@ class ChatMessage(BaseModel):
     content: str
 
 
-#TODO: add more external function calls for other services if required
+# TODO: add more external function calls for other services if required
 class ModelService:
 
     def __init__(self):
         self.client = OpenAI()
         self.model = "gpt-3.5-turbo"
 
-        self.tools = [{
-            "type": "function",
-            "function": {
-                "name": "get_course_assignments",
-                "description":
-                "Get upcoming assignments for a specific course",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "course_identifier": {
-                            "type":
-                            "string",
-                            "description":
-                            "Course code or name (e.g., 'EE 553', 'C++', 'Programming')"
-                        }
-                    }
-                }
-            }
-        }, {
-            "type": "function",
-            "function": {
-                "name": "get_upcoming_courses_assignments",
-                "description":
-                "Get upcoming assignments for all enrolled courses",
-                "parameters": {
-                    "type": "object",
-                    "properties": {}
-                }
-            }
-        }, {
-            "type": "function",
-            "function": {
-                "name": "get_academic_calendar_event",
-                "description":
-                "Get information about academic calendar events (like spring break, semester start/end dates, etc)",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "event_type": {
-                            "type":
-                            "string",
-                            "description":
-                            "Type of academic calendar event (e.g., 'spring break', 'finals week', 'semester start')"
-                        }
-                    }
-                }
-            }
-        }, {
-            "type": "function",
-            "function": {
-                "name": "get_program_requirements",
-                "description":
-                "Get course requirements for a specific degree program",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "program": {
-                            "type":
-                            "string",
-                            "description":
-                            "Degree program name (e.g., 'AAI masters', 'Computer Science PhD')"
-                        }
-                    }
-                }
-            }
-        }]
+        self.tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_course_assignments",
+                    "description": "Get upcoming assignments for a specific course",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "course_identifier": {
+                                "type": "string",
+                                "description": "Course code or name (e.g., 'EE 553', 'C++', 'Programming')",
+                            }
+                        },
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_upcoming_courses_assignments",
+                    "description": "Get upcoming assignments for all enrolled courses",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_academic_calendar_event",
+                    "description": "Get information about academic calendar events (like spring break, semester start/end dates, etc)",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "event_type": {
+                                "type": "string",
+                                "description": "Type of academic calendar event (e.g., 'spring break', 'finals week', 'semester start')",
+                            }
+                        },
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_program_requirements",
+                    "description": "Get course requirements for a specific degree program",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "program": {
+                                "type": "string",
+                                "description": "Degree program name (e.g., 'AAI masters', 'Computer Science PhD')",
+                            }
+                        },
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_announcements_for_all_courses",
+                    "description": "Get announcements for all enrolled courses, generally if you do not get course ids or name, you would call this function",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_announcements_for_specific_courses",
+                    "description": "Get announcements for specific courses",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "course_identifier": {
+                                "type": "string",
+                                "description": "Course code or name (e.g., 'EE 553', 'C++', 'Programming'), could be a list of courses",
+                            }
+                        },
+                    },
+                },
+            },
+        ]
 
     def generate_response(
         self,
         messages: List[ChatMessage],
-        function_result: Optional[Union[str,
-                                        Dict]] = None) -> Union[str, dict]:
+        function_result: Optional[Union[str, Dict]] = None,
+    ) -> Union[str, dict]:
         """Generate a response using the OpenAI API with function calling and structured responses"""
         try:
-            formatted_messages = [{
-                "role": msg.role,
-                "content": msg.content
-            } for msg in messages]
+            formatted_messages = [
+                {"role": msg.role, "content": msg.content} for msg in messages
+            ]
 
             if function_result:
-                formatted_context = json.dumps(
-                    function_result, indent=2) if isinstance(
-                        function_result, dict) else function_result
+                formatted_context = (
+                    json.dumps(function_result, indent=2)
+                    if isinstance(function_result, dict)
+                    else function_result
+                )
                 readable_context = (
                     "You are a helpful assistant with access to Stevens Institute of Technology information. "
                     "Use the following context to answer the question, but respond naturally and conversationally. "
                     f"\n\nContext: {formatted_context}\n\n"
                     "Please summarize it for the user in a clear and concise manner. Please use some emojis to make it more engaging.\
-                        Also include some words of encouragement and motivation to the user (keep it short), who is a student at Stevens Institute of Technology."
+                    Also include some words of encouragement and motivation to the user (keep it short), who is a student at Stevens Institute of Technology."
+                  
+                  
+                  
+                   
                 )
 
-                formatted_messages.append({
-                    "role": "system",
-                    "content": readable_context
-                })
+                formatted_messages.append(
+                    {"role": "system", "content": readable_context}
+                )
 
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -122,15 +142,14 @@ class ModelService:
                 tools=self.tools,
                 tool_choice="auto",
                 temperature=0.7,
-                max_tokens=500)
+                max_tokens=500,
+            )
 
             response_message = response.choices[0].message
-            if hasattr(response_message,
-                       "tool_calls") and response_message.tool_calls:
+            if hasattr(response_message, "tool_calls") and response_message.tool_calls:
                 return {
                     "function": response_message.tool_calls[0].function.name,
-                    "arguments":
-                    response_message.tool_calls[0].function.arguments
+                    "arguments": response_message.tool_calls[0].function.arguments,
                 }
 
             # if no function/tool call, return the response content (string)

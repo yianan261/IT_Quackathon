@@ -5,8 +5,8 @@ from app.context import get_service_context
 from fastapi import Depends
 
 logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 load_dotenv()
@@ -38,7 +38,8 @@ app = FastAPI(
     title="Stevens AI Assistant API",
     description="Backend API for Stevens AI Assistant Chrome Extension",
     version="1.0.0",
-    lifespan=lifespan)
+    lifespan=lifespan,
+)
 
 # cors
 app.add_middleware(
@@ -85,7 +86,7 @@ async def test_canvas_assignments(course_id: int):
         "course_id": course_id,
         "assignments_count": len(assignments),
         "assignments": assignments,
-        "raw_response": canvas.get_raw_assignments(course_id)
+        "raw_response": canvas.get_raw_assignments(course_id),
     }
 
 
@@ -99,6 +100,24 @@ async def get_calendar_events(service: dict = Depends(get_service_context)):
     return {"events_count": len(events), "events": events}
 
 
+# get annoucements
+# method : get
+
+@app.get("/test/canvas/annoucements")
+async def test_canvas_annoucements():
+    """
+    Test endpoint for Canvas announcements API.
+    Retrieves announcements for the specified course ID.
+    """
+    announcements = canvas.get_announcements_for_all_courses()
+    # announcements = canvas.format_announcements_response(announcements)
+    return {
+        
+        "announcements": announcements
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
