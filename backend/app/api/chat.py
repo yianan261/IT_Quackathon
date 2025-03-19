@@ -129,7 +129,9 @@ async def chat(request: ChatRequest, services: dict = Depends(get_service_contex
                 announcements = canvas_service.get_announcements_for_all_courses()
                 logger.info(f"Got announcements response: {announcements}")
                 if announcements:
-                    function_result = announcements
+                    formatted_announcements = canvas_service.format_announcements_response(announcements)
+                    function_result = formatted_announcements
+                    logger.info(f"Formatted announcements: {function_result}")
                 else:
                     function_result = "No announcements found for your courses."
 
@@ -139,7 +141,8 @@ async def chat(request: ChatRequest, services: dict = Depends(get_service_contex
                 announcements = canvas_service.get_announcements_for_course(course_identifier)
                 logger.info(f"Got announcements response: {announcements}")
                 if announcements:
-                    function_result = announcements
+                    formatted_announcements = canvas_service.format_announcements_response(announcements)
+                    function_result = formatted_announcements
                     logger.info(f"Formatted announcements: {function_result}")
                 else:
                     function_result = f"No announcements found for {course_identifier}."
