@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "DuckingAI",
+  "version": "1.0",
+  "description": "AI chatbot for Stevens Institute of Technology",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://sit.instructure.com/*",
+    "https://wd5.myworkday.com/stevens/*",
+    "http://localhost:8000/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://sit.instructure.com/*",
+        "https://wd5.myworkday.com/stevens/*",
+        "<all_urls>"
+      ],
+      "js": ["src/js/config.js", "src/js/content.js"],
+      "css": ["src/css/chatbot.css"]
+    }
+  ],
+  "background": {
+    "service_worker": "src/js/background.js"
+  },
+  "web_accessible_resources": [{
+    "resources": [
+      "src/assets/*",
+      "src/components/*"
+    ],
+    "matches": ["<all_urls>"]
+  }]
+} 
