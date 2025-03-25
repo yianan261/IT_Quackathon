@@ -283,6 +283,69 @@ class CanvasService:
             logger.error(f"Error extracting course identifier: {str(e)}")
             return []
 
+    def format_announcements_response(self, announcements_data: Dict) -> str:
+        """Format announcements response with error handling, keeping latest 3 announcements per course"""
+        try:
+            if not announcements_data:
+                return "No announcement information available."
+
+            all_courses = announcements_data.get("courses", [])
+            if not all_courses:
+                return "No announcements found for any of the specified courses."
+
+            response_parts = []
+            
+            for course_data in all_courses:
+                course_name = course_data.get("course_name", "Unknown Course")
+                announcements = course_data.get("announcements", [])
+                course_link = course_data.get("course_announcements_link", "")
+
+                if not announcements:
+                    continue
+
+                response_parts.append(f"\n📚 {course_name}")
+                if course_link:
+                    response_parts.append(f"   View all announcements: {course_link}")
+
+                # Sort announcements by posted_at date and keep latest 3
+                sorted_announcements = sorted(
+                    [a for a in announcements if a.get("posted_at")],
+                    key=lambda x: x.get("posted_at"),
+                    reverse=True
+                )[:3]
+
+                for announcement in sorted_announcements:
+                    try:
+                        title = announcement.get("title", "Untitled Announcement")
+                        posted_at = announcement.get("posted_at")
+                        author = announcement.get("author", {})
+                        author_name = author.get("display_name", "Unknown Author")
+                        author_pronouns = author.get("pronouns", "")
+
+                        if posted_at:
+                            posted_date = datetime.fromisoformat(posted_at.replace("Z", "+00:00"))
+                            local_tz = get_localzone()
+                            posted_date = posted_date.astimezone(local_tz)
+                            
+                            announcement_parts = [
+                                f"  📢 {title}",
+                                f"     Posted: {posted_date.strftime('%B %d, %Y at %I:%M %p %Z')}",
+                                f"     By: {author_name}{f' ({author_pronouns})' if author_pronouns else ''}"
+                            ]
+                            response_parts.append("\n".join(announcement_parts))
+                    except Exception as e:
+                        logger.error(f"Error formatting announcement: {str(e)}")
+                        continue
+
+            if not response_parts:
+                return "No announcements are currently available for your courses. 📚✨"
+
+            return "\n\n".join(response_parts)
+
+        except Exception as e:
+            logger.error(f"Error formatting announcements response: {str(e)}")
+            return "Error retrieving announcement information."
+
     def get_announcements_for_course(self, course: Union[int, str, List[Dict]]) -> Dict:
         """
         Get announcements for specified course(s).
@@ -353,7 +416,6 @@ class CanvasService:
                 results.append({
                     "course_name": course_name,
                     "course_announcements_link": f"https://sit.instructure.com/courses/{course_id}/announcements",
-
                     "announcements": ann_list
                 })
             return {"courses": results}
