@@ -16,3 +16,5 @@ env/
 
 *.db
 dump.rdb
+__pycache__/
+*.pyc
