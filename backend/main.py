@@ -203,8 +203,8 @@ async def test_automation():
                     # Workday 特有的选择器
                     "[data-automation-widget-type='BUTTON']:contains('Academics')"
                 ],
-                "wait_before_click": 4000,  # 增加等待时间至7秒，确保Workday页面完全加载
-                "timeout": 20000,  # 增加超时时间至20秒
+                "wait_before_click": 0,  # 不需要等待，元素可见即点击
+                "timeout": 20000,  # 保持20秒超时时间以确保元素有充分时间加载
                 "critical": True   # 标记为关键操作
             }
         ],

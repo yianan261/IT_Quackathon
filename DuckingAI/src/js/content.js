@@ -439,21 +439,79 @@ class AutomationManager {
     debug('Scrolling to element');
     element.scrollIntoView({ behavior: 'auto', block: 'center' });
     
-    // 等待一小段时间，确保元素可交互
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // 如果需要额外等待，则执行等待
+    // 只有在明确要求等待时才执行等待
+    // 否则立即点击元素，不进行默认等待
     if (wait_before_click > 0) {
       debug(`Waiting ${wait_before_click}ms before clicking as requested`);
       await new Promise(resolve => setTimeout(resolve, wait_before_click));
+    } else {
+      debug('Clicking element immediately without waiting');
     }
     
     // 6. 执行点击
     debug(`Clicking element: ${description}`);
     
     try {
-      // 尝试使用原生click方法
-      element.click();
+      // 对于链接元素，阻止默认行为
+      if (element.tagName.toLowerCase() === 'a' || element.closest('a')) {
+        debug('Element is or is inside a link, preventing default behavior');
+        // 创建并分发自定义的鼠标点击事件，并阻止默认行为
+        const clickEvent = new MouseEvent('click', {
+          view: window,
+          bubbles: true,
+          cancelable: true
+        });
+        
+        // 检查是否是Workday卡片
+        if (description.toLowerCase().includes('workday')) {
+          debug('This is a Workday card, using custom click handling');
+          
+          // 保存链接目标，以便后续手动导航
+          const href = element.href || element.closest('a')?.href;
+          
+          // 阻止事件传播和默认行为
+          element.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            debug('Prevented default link behavior for Workday card');
+          }, { once: true, capture: true });
+          
+          // 触发点击
+          element.click();
+          
+          // 向background脚本发送消息，通知已点击Workday卡片
+          chrome.runtime.sendMessage({
+            type: 'WORKDAY_CARD_CLICKED',
+            href: href
+          });
+          
+          // 返回成功结果（对于非Workday元素）
+          return {
+            description,
+            success: true,
+            timestamp: new Date().toISOString(),
+            elementInfo: {
+              tagName: element.tagName,
+              id: element.id,
+              className: element.className,
+              textContent: element.textContent?.substring(0, 50) || 'no text',
+              href: href
+            }
+          };
+        }
+        
+        // 对于其他链接，使用正常点击
+        const prevented = !element.dispatchEvent(clickEvent);
+        if (prevented) {
+          debug('Click default prevented via dispatchEvent');
+        } else {
+          // 如果事件未被阻止，手动点击
+          element.click();
+        }
+      } else {
+        // 尝试使用原生click方法
+        element.click();
+      }
     } catch (clickError) {
       debug(`Native click failed: ${clickError.message}, trying alternative methods`);
       
@@ -473,6 +531,7 @@ class AutomationManager {
       }
     }
     
+    // 返回成功结果（对于非Workday元素）
     return {
       description,
       success: true,
@@ -536,8 +595,19 @@ class AutomationManager {
         return;
       }
       
+      // 设置最小检查间隔，避免过于频繁的DOM检查
+      const CHECK_INTERVAL = 50; // 50毫秒的检查间隔
+      let lastCheckTime = Date.now();
+      
       // 设置MutationObserver监听DOM变化
       const observer = new MutationObserver(() => {
+        // 限制检查频率
+        const now = Date.now();
+        if (now - lastCheckTime < CHECK_INTERVAL) {
+          return;
+        }
+        lastCheckTime = now;
+        
         // 检查是否已经超时
         if (Date.now() - startTime > timeout) {
           debug(`waitForElement: timeout after ${timeout}ms`);
@@ -549,8 +619,9 @@ class AutomationManager {
         // 重新检查元素
         element = checkForElement();
         if (element) {
-          debug(`waitForElement: element found after ${Date.now() - startTime}ms`);
+          debug(`waitForElement: element found after ${Date.now() - startTime}ms due to DOM change`);
           observer.disconnect();
+          if (interval) clearInterval(interval);
           resolve(element);
         }
       });
@@ -563,7 +634,7 @@ class AutomationManager {
         characterData: false
       });
       
-      // 设置周期性检查
+      // 设置周期性检查，但使用更短的间隔
       const interval = setInterval(() => {
         // 检查是否已经超时
         if (Date.now() - startTime > timeout) {
@@ -582,7 +653,7 @@ class AutomationManager {
           observer.disconnect();
           resolve(element);
         }
-      }, 500); // 每500毫秒检查一次
+      }, 100); // 每100毫秒检查一次，比原来的500毫秒更频繁
       
       // 确保超时后清理资源
       setTimeout(() => {
