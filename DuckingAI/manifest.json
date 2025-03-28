@@ -6,18 +6,26 @@
   "permissions": [
     "activeTab",
     "scripting",
-    "storage"
+    "storage",
+    "tabs",
+    "webNavigation",
+    "contextMenus"
   ],
   "host_permissions": [
     "https://sit.instructure.com/*",
     "https://wd5.myworkday.com/stevens/*",
-    "http://localhost:8000/*"
+    "http://localhost:8000/*",
+    "https://login.stevens.edu/*"
   ],
+  "action": {
+    "default_popup": "src/html/popup.html"
+  },
   "content_scripts": [
     {
       "matches": [
         "https://sit.instructure.com/*",
         "https://wd5.myworkday.com/stevens/*",
+        "https://login.stevens.edu/*",
         "<all_urls>"
       ],
       "js": ["src/js/config.js", "src/js/content.js"],
@@ -25,7 +33,17 @@
     }
   ],
   "background": {
-    "service_worker": "src/js/background.js"
+    "service_worker": "src/js/background.js",
+    "type": "module"
+  },
+  "commands": {
+    "trigger-automation": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+A",
+        "mac": "Command+Shift+A"
+      },
+      "description": "Trigger automation workflow"
+    }
   },
   "web_accessible_resources": [{
     "resources": [
