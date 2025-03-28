@@ -37,9 +37,8 @@ function initialize() {
   // 设置消息和命令监听器
   setupListeners();
   
-  // 立即执行一次自动化，然后开始轮询
+  // 仅开始轮询，不立即执行
   setTimeout(() => {
-    triggerAutomation();
     startPolling();
   }, 2000);
 }
@@ -141,6 +140,29 @@ function setupListeners() {
       case 'TOGGLE_POLLING':
         automationState.polling = message.enabled;
         sendResponse({ status: 'polling_' + (message.enabled ? 'started' : 'stopped') });
+        break;
+      case 'WORKDAY_CARD_CLICKED':
+        // 处理Workday卡片点击事件
+        console.log('Received WORKDAY_CARD_CLICKED message:', message);
+        // 防止并发处理
+        if (!automationState.navigationInProgress) {
+          automationState.navigationInProgress = true;
+          
+          // 获取或使用默认的Workday URL
+          const workdayUrl = message.href || 'https://wd5.myworkday.com/stevens/';
+          console.log(`Manual navigation to Workday URL: ${workdayUrl}`);
+          
+          // 手动触发导航
+          chrome.tabs.update(sender.tab.id, { url: workdayUrl }, (tab) => {
+            console.log('Manual navigation to Workday initiated');
+            
+            // 导航完成后会通过tab updates事件来处理下一步
+            // 不需要在这里设置navigationInProgress为false，
+            // 因为那会在页面加载完成后的事件处理程序中处理
+          });
+        }
+        
+        sendResponse({ status: 'acknowledged' });
         break;
       case 'CONTENT_SCRIPT_LOADED':
         console.log('Content script loaded in tab:', sender.tab.id, 'URL:', message.url);
@@ -385,6 +407,12 @@ async function handleCurrentStep(tabId, instruction) {
         // 复制当前步骤以避免引用问题
         const currentStep = {...instruction.steps[currentStepIndex]};
         console.log('Current step:', currentStep);
+        
+        // 为立即点击模式做优化，如果没有特定要求等待则设置为0
+        if (currentStep.wait_before_click === undefined) {
+          currentStep.wait_before_click = 0;
+        }
+        
         elementsToClick = [currentStep];
         
         // 更新下一步的索引
@@ -441,7 +469,6 @@ async function handleCurrentStep(tabId, instruction) {
     });
   } catch (error) {
     console.error('Error handling current step:', error);
-    // 发生错误时，也需要清理状态，避免卡住
     automationState.isRunning = false;
     throw error;
   }
