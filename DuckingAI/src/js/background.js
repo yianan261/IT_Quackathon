@@ -137,6 +137,18 @@ function setupListeners() {
         handleAutomationFailed(message.error);
         sendResponse({ status: 'acknowledged' });
         break;
+      case 'DIALOG_VERIFIED':
+        console.log('Dialog verification succeeded:', message.result);
+        // 将这种情况也视为自动化成功的一种
+        handleAutomationCompleted(message.result);
+        sendResponse({ status: 'acknowledged' });
+        break;
+      case 'DIALOG_VERIFICATION_FAILED':
+        console.error('Dialog verification failed:', message.error);
+        // 这种情况需要处理为自动化失败
+        handleAutomationFailed(message.error);
+        sendResponse({ status: 'acknowledged' });
+        break;
       case 'TOGGLE_POLLING':
         automationState.polling = message.enabled;
         sendResponse({ status: 'polling_' + (message.enabled ? 'started' : 'stopped') });
@@ -372,6 +384,8 @@ async function handleCurrentStep(tabId, instruction) {
       const executedSteps = pendingAutomation.executedSteps || [];
       
       console.log(`Processing step ${currentStepIndex} of multi-step navigation`);
+      console.log(`Current step description: ${instruction.steps[currentStepIndex]?.description || 'unknown'}`);
+      console.log(`Current step action: ${instruction.steps[currentStepIndex]?.action || 'unknown'}`);
       
       // 检查当前步骤是否已执行过
       if (executedSteps.includes(currentStepIndex)) {
@@ -413,7 +427,60 @@ async function handleCurrentStep(tabId, instruction) {
           currentStep.wait_before_click = 0;
         }
         
-        elementsToClick = [currentStep];
+        // 特殊处理Academics步骤 - 确保这个步骤单独执行
+        const isAcademicsStep = currentStep.description && currentStep.description.includes('Academics');
+        if (isAcademicsStep) {
+          console.log('Special processing for Academics step - ensuring proper navigation flow');
+        }
+        
+        // 处理特殊步骤类型
+        if (currentStep.action === 'verify_dialog') {
+          elementsToClick = null;
+          // 发送验证对话框的消息
+          return new Promise((resolve, reject) => {
+            console.log(`Sending VERIFY_DIALOG message to tab ${tabId}`);
+            chrome.tabs.sendMessage(
+              tabId, 
+              { type: 'VERIFY_DIALOG', dialogInfo: currentStep },
+              async (response) => {
+                if (chrome.runtime.lastError) {
+                  console.error('Error sending verify dialog message:', chrome.runtime.lastError);
+                  reject(chrome.runtime.lastError);
+                } else {
+                  console.log(`Successfully verified dialog in step ${currentStepIndex}`);
+                  
+                  // 记录当前步骤为已执行
+                  executedSteps.push(currentStepIndex);
+                  
+                  // 计算下一步索引
+                  const nextStepIndex = currentStepIndex + 1;
+                  const isLastStep = nextStepIndex >= instruction.steps.length;
+                  
+                  // 如果是最后一步，清理存储
+                  if (isLastStep) {
+                    console.log('Last step completed, cleaning up...');
+                    await chrome.storage.local.remove('pendingAutomation');
+                    automationState.isRunning = false;
+                  } else {
+                    // 更新到下一步
+                    console.log(`Updating to next step: ${nextStepIndex}`);
+                    await chrome.storage.local.set({
+                      'pendingAutomation': {
+                        instruction: instruction,
+                        currentStepIndex: nextStepIndex,
+                        lastUpdated: Date.now(),
+                        executedSteps: executedSteps
+                      }
+                    });
+                  }
+                  resolve(response);
+                }
+              }
+            );
+          });
+        } else {
+          elementsToClick = [currentStep];
+        }
         
         // 更新下一步的索引
         const nextStepIndex = currentStepIndex + 1;
@@ -446,6 +513,7 @@ async function handleCurrentStep(tabId, instruction) {
     
     // 发送消息到内容脚本
     return new Promise((resolve, reject) => {
+      console.log(`Sending AUTOMATION_CLICK message to tab ${tabId} for element: ${elementsToClick?.[0]?.description || 'unknown'}`);
       chrome.tabs.sendMessage(
         tabId, 
         { type: 'AUTOMATION_CLICK', elementsToClick: elementsToClick },
@@ -462,6 +530,14 @@ async function handleCurrentStep(tabId, instruction) {
               await chrome.storage.local.remove('pendingAutomation');
               automationState.isRunning = false;
             }
+            
+            // 给重要步骤额外的处理时间
+            const isImportantNavigation = elementsToClick?.[0]?.description?.includes('Academics');
+            if (isImportantNavigation) {
+              console.log('Important navigation step completed, waiting a bit before proceeding...');
+              await new Promise(r => setTimeout(r, 3000));
+            }
+            
             resolve(response);
           }
         }

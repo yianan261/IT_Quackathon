@@ -288,6 +288,28 @@ class AutomationManager {
         
         return true; // 保持消息通道开放
       }
+      
+      if (message.type === 'VERIFY_DIALOG') {
+        // 立即发送响应，表示已收到命令
+        sendResponse({ status: 'received' });
+        
+        // 异步处理对话框验证
+        this.verifyDialogForm(message.dialogInfo)
+          .then(result => {
+            chrome.runtime.sendMessage({
+              type: 'DIALOG_VERIFIED',
+              result: result
+            });
+          })
+          .catch(error => {
+            chrome.runtime.sendMessage({
+              type: 'DIALOG_VERIFICATION_FAILED',
+              error: error.message
+            });
+          });
+        
+        return true; // 保持消息通道开放
+      }
     });
   }
 
@@ -350,6 +372,13 @@ class AutomationManager {
   async clickElement(elementInfo) {
     const { description, selector, fallback_selectors = [], timeout = 5000, wait_before_click = 0 } = elementInfo;
     
+    // 增加特殊日志，跟踪当前正在尝试点击的元素
+    debug(`==========================================`);
+    debug(`Starting click process for: "${description}"`);
+    debug(`Current URL: ${window.location.href}`);
+    debug(`Current page title: ${document.title}`);
+    debug(`==========================================`);
+    
     // 1. 尝试所有选择器
     let element = null;
     let allSelectors = [];
@@ -369,25 +398,59 @@ class AutomationManager {
     // 记录所有将要尝试的选择器
     debug(`Will try ${allSelectors.length} selectors to find "${description}"`);
     
-    for (const sel of allSelectors) {
-      try {
-        debug(`Trying selector: ${sel}`);
-        // 使用querySelectorAll来获取匹配数量
-        const matches = document.querySelectorAll(sel);
-        if (matches && matches.length > 0) {
-          element = matches[0]; // 使用第一个匹配
-          debug(`Found ${matches.length} elements with selector: ${sel}, using first match`);
-          
-          // 如果找到了多个元素，记录一些附加信息以便诊断
-          if (matches.length > 1) {
-            debug(`Multiple matches found! Text of first element: "${element.textContent?.trim() || 'no text'}"`);
+    // 对Academics按钮做特殊处理
+    if (description.includes('Academics')) {
+      debug('Special handling for Academics button');
+      
+      // 查找任何包含Academics文字的可交互元素
+      const academicsElements = Array.from(document.querySelectorAll('*')).filter(el => {
+        const text = (el.textContent || '').trim();
+        const isVisible = !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+        const isInteractive = el.tagName === 'BUTTON' || 
+                             el.tagName === 'A' || 
+                             el.hasAttribute('role') || 
+                             el.hasAttribute('tabindex') ||
+                             el.hasAttribute('data-automation-id');
+        return text.includes('Academic') && isVisible && isInteractive;
+      });
+      
+      if (academicsElements.length > 0) {
+        debug(`Found ${academicsElements.length} potential Academics elements by text content`);
+        
+        // 查找最可能是按钮的元素
+        const bestMatch = academicsElements.find(el => 
+          el.tagName === 'BUTTON' || 
+          el.getAttribute('role') === 'button' ||
+          el.getAttribute('tabindex') === '0'
+        ) || academicsElements[0];
+        
+        debug(`Selected best Academics element: ${bestMatch.tagName}, text: "${bestMatch.textContent.trim()}"`);
+        element = bestMatch;
+      }
+    }
+    
+    // 如果特殊处理没找到元素，继续常规查找
+    if (!element) {
+      for (const sel of allSelectors) {
+        try {
+          debug(`Trying selector: ${sel}`);
+          // 使用querySelectorAll来获取匹配数量
+          const matches = document.querySelectorAll(sel);
+          if (matches && matches.length > 0) {
+            element = matches[0]; // 使用第一个匹配
+            debug(`Found ${matches.length} elements with selector: ${sel}, using first match`);
+            
+            // 如果找到了多个元素，记录一些附加信息以便诊断
+            if (matches.length > 1) {
+              debug(`Multiple matches found! Text of first element: "${element.textContent?.trim() || 'no text'}"`);
+            }
+            break;
+          } else {
+            debug(`No matches for selector: ${sel}`);
           }
-          break;
-        } else {
-          debug(`No matches for selector: ${sel}`);
+        } catch (error) {
+          debug(`Selector error: ${sel} - ${error.message}`);
         }
-      } catch (error) {
-        debug(`Selector error: ${sel} - ${error.message}`);
       }
     }
     
@@ -431,6 +494,16 @@ class AutomationManager {
       debug(`Body classes: ${document.body.className}`);
       debug(`Body ID: ${document.body.id}`);
       
+      // 特殊情况：对于Academics按钮，如果找不到，尝试遍历和记录所有可点击元素
+      if (description.includes('Academics')) {
+        debug('Dumping all clickable elements on page:');
+        const clickableElements = Array.from(document.querySelectorAll('button, a, [role="button"], [tabindex="0"]'));
+        debug(`Found ${clickableElements.length} clickable elements`);
+        clickableElements.slice(0, 10).forEach((el, i) => {
+          debug(`Clickable #${i}: ${el.tagName}, text: "${el.textContent?.trim() || 'no text'}", class: ${el.className}`);
+        });
+      }
+      
       throw new Error(`Element "${description}" not found after ${timeout}ms`);
     }
     
@@ -450,6 +523,54 @@ class AutomationManager {
     
     // 6. 执行点击
     debug(`Clicking element: ${description}`);
+    
+    // 对于Academics按钮的特殊处理
+    if (description.includes('Academics')) {
+      debug('Using enhanced click method for Academics button');
+      try {
+        // 首先尝试直接点击
+        element.click();
+        debug('Direct click on Academics button successful');
+        
+        // 添加一个额外的检查，在点击后等待URL变化
+        const startUrl = window.location.href;
+        debug(`Current URL before Academics click: ${startUrl}`);
+        
+        // 等待并检查URL是否变化
+        await new Promise(resolve => {
+          const checkInterval = setInterval(() => {
+            if (window.location.href !== startUrl) {
+              debug(`URL changed to: ${window.location.href}`);
+              clearInterval(checkInterval);
+              resolve();
+            }
+          }, 100);
+          
+          // 设置超时
+          setTimeout(() => {
+            clearInterval(checkInterval);
+            debug('No URL change detected, continuing anyway');
+            resolve();
+          }, 5000);
+        });
+        
+        // 返回成功结果
+        return {
+          description,
+          success: true,
+          timestamp: new Date().toISOString(),
+          elementInfo: {
+            tagName: element.tagName,
+            id: element.id,
+            className: element.className,
+            textContent: element.textContent?.substring(0, 50) || 'no text'
+          }
+        };
+      } catch (error) {
+        debug(`Error during Academics click: ${error.message}`);
+        // 尝试备用点击方法
+      }
+    }
     
     try {
       // 对于链接元素，阻止默认行为
@@ -545,6 +666,115 @@ class AutomationManager {
     };
   }
 
+  // 验证对话框是否显示
+  async verifyDialogForm(dialogInfo) {
+    const { description, selector, fallback_selectors = [], timeout = 5000 } = dialogInfo;
+    
+    debug(`Attempting to verify dialog: ${description}`);
+    
+    // 组合所有选择器
+    const allSelectors = [selector, ...(fallback_selectors || [])];
+    
+    try {
+      // 特殊处理：首先尝试使用更通用的对话框检测
+      const genericDialogSelectors = [
+        '[role="dialog"]', 
+        '[aria-modal="true"]', 
+        '.wd-popup', 
+        '[data-automation-id="editPopup"]',
+        '.WKQS.WHEH', // Workday特定对话框类
+        'div.WCU[data-popup-version]'
+      ];
+      
+      // 首先尝试通用选择器快速查找
+      let dialog = null;
+      for (const genericSelector of genericDialogSelectors) {
+        try {
+          const elements = document.querySelectorAll(genericSelector);
+          if (elements && elements.length > 0) {
+            dialog = elements[0];
+            debug(`Found dialog with generic selector: ${genericSelector}`);
+            break;
+          }
+        } catch (error) {
+          debug(`Generic selector error: ${genericSelector} - ${error.message}`);
+        }
+      }
+      
+      // 如果通用选择器没找到，再等待特定选择器
+      if (!dialog) {
+        debug('No dialog found with generic selectors, waiting for specific selectors...');
+        dialog = await this.waitForElement(allSelectors, timeout);
+      }
+      
+      // 最后一次尝试：查找任何包含"Find Course Sections"文本的大型容器
+      if (!dialog) {
+        debug('Trying to find dialog by content...');
+        const potentialDialogs = Array.from(document.querySelectorAll('div')).filter(div => {
+          return div.offsetWidth > 300 && div.offsetHeight > 300 && 
+                 (div.textContent || '').includes('Find Course Sections') &&
+                 (div.className || '').length > 0;
+        });
+        
+        if (potentialDialogs.length > 0) {
+          dialog = potentialDialogs[0];
+          debug(`Found potential dialog by content: ${dialog.className}`);
+        }
+      }
+      
+      if (!dialog) {
+        throw new Error(`Dialog "${description}" did not appear after ${timeout}ms`);
+      }
+      
+      debug(`Successfully verified dialog: ${description}`);
+      debug(`Dialog details: Tag=${dialog.tagName}, Class=${dialog.className}`);
+      
+      // 可以添加截图功能帮助调试
+      this.showSuccessIndicator(`Dialog "${description}" verified`);
+      
+      return {
+        description,
+        success: true,
+        timestamp: new Date().toISOString(),
+        elementInfo: {
+          tagName: dialog.tagName,
+          id: dialog.id || 'no-id',
+          className: dialog.className,
+          textContent: dialog.textContent?.substring(0, 50) || 'no text',
+          attributes: {
+            role: dialog.getAttribute('role') || 'none',
+            ariaModal: dialog.getAttribute('aria-modal') || 'none',
+            dataAutomationId: dialog.getAttribute('data-automation-id') || 'none'
+          }
+        }
+      };
+    } catch (error) {
+      debug(`Error verifying dialog: ${error.message}`);
+      this.showErrorIndicator(error.message);
+      throw error;
+    }
+  }
+  
+  // 显示成功提示
+  showSuccessIndicator(message) {
+    const successElement = document.createElement('div');
+    Object.assign(successElement.style, {
+      position: 'fixed',
+      top: '10px',
+      right: '10px',
+      backgroundColor: 'rgba(0, 128, 0, 0.8)',
+      color: 'white',
+      padding: '10px',
+      borderRadius: '5px',
+      zIndex: '9999',
+      maxWidth: '300px'
+    });
+    successElement.textContent = `Automation Success: ${message}`;
+    
+    document.body.appendChild(successElement);
+    setTimeout(() => successElement.remove(), 3000);
+  }
+
   // 优化的元素等待功能
   waitForElement(selectors, timeout = 5000) {
     return new Promise(resolve => {
@@ -552,8 +782,15 @@ class AutomationManager {
       const startTime = Date.now();
       debug(`Starting to wait for element with ${selectors.length} selectors, timeout: ${timeout}ms`);
       
+      // 检查是否正在寻找Academics按钮
+      const isAcademicsSearch = selectors.some(s => s.toLowerCase().includes('academic'));
+      if (isAcademicsSearch) {
+        debug('Special handling activated for Academics element search');
+      }
+      
       // 定义检查元素的函数
       const checkForElement = () => {
+        // 首先尝试所有指定的选择器
         for (const selector of selectors) {
           try {
             const elements = document.querySelectorAll(selector);
@@ -567,20 +804,101 @@ class AutomationManager {
           }
         }
         
-        // 尝试更宽松的文本查找（只用描述中的关键词）
-        const keywordMatch = selectors.join(' ').match(/academics|workday|button/i);
-        if (keywordMatch) {
-          const keyword = keywordMatch[0].toLowerCase();
-          debug(`waitForElement: trying text-based search for keyword: ${keyword}`);
+        // 尝试基于文本内容查找（专门针对Workday UI）
+        // 提取选择器中的关键词
+        const selectorString = selectors.join(' ');
+        let targetTexts = [];
+        
+        if (selectorString.includes('Find Course Sections')) {
+          targetTexts.push('Find Course Sections');
+        } else if (selectorString.includes('Academic')) {
+          targetTexts.push('Academic', 'Academics');
+          // 对于Academics按钮，增加更多变体
+          debug('Searching for Academic/Academics text in any element');
+        } else if (selectorString.includes('dialog') || selectorString.includes('editPopup')) {
+          // 查找对话框
+          const dialogs = document.querySelectorAll('[role="dialog"], [aria-modal="true"], .wd-popup');
+          if (dialogs && dialogs.length > 0) {
+            debug(`waitForElement: found dialog using role/modal attribute`);
+            return dialogs[0];
+          }
+        }
+        
+        if (targetTexts.length > 0) {
+          debug(`waitForElement: trying text-based search for: ${targetTexts.join(', ')}`);
           
-          const allElements = Array.from(document.querySelectorAll('button, a, div[role="button"], [role="menuitem"], .gwt-Label, [data-automation-id]'));
-          const matchingElements = allElements.filter(el => {
-            const text = el.textContent || el.innerText || el.getAttribute('aria-label') || '';
-            return text.toLowerCase().includes(keyword);
+          // 查找匹配文本内容的任何元素
+          // 这种方法更有可能找到Workday的元素，即使它们没有明确的标题或ID
+          const allElementsWithText = Array.from(document.querySelectorAll('*')).filter(el => {
+            // 仅考虑可见元素
+            if (el.offsetWidth === 0 && el.offsetHeight === 0) return false;
+            
+            // 检查元素的文本内容
+            const text = el.textContent || el.innerText || '';
+            return targetTexts.some(target => text.includes(target) && text.length < target.length * 5);
           });
           
-          if (matchingElements.length > 0) {
-            return matchingElements[0];
+          if (allElementsWithText.length > 0) {
+            debug(`waitForElement: found ${allElementsWithText.length} elements by text content`);
+            
+            // 对于Academics特殊处理 - 优先选择按钮或可点击元素
+            if (isAcademicsSearch) {
+              const clickableAcademics = allElementsWithText.filter(el => 
+                el.tagName === 'BUTTON' || 
+                el.getAttribute('role') === 'button' ||
+                el.getAttribute('tabindex') === '0' ||
+                el.tagName === 'A'
+              );
+              
+              if (clickableAcademics.length > 0) {
+                debug(`waitForElement: found ${clickableAcademics.length} clickable Academic elements`);
+                return clickableAcademics[0];
+              }
+            }
+            
+            // 尝试找到最小的包含元素 - 通常是实际的可点击元素
+            const smallestTextElement = allElementsWithText.reduce((smallest, current) => {
+              // 优先考虑按钮和可点击元素
+              if (current.tagName === 'BUTTON' || current.getAttribute('role') === 'button') {
+                return current;
+              }
+              
+              const currentSize = current.textContent.length;
+              const smallestSize = smallest ? smallest.textContent.length : Infinity;
+              return currentSize < smallestSize ? current : smallest;
+            }, null);
+            
+            if (smallestTextElement) {
+              debug(`waitForElement: using smallest text element: ${smallestTextElement.tagName}, text length: ${smallestTextElement.textContent.length}`);
+              return smallestTextElement;
+            }
+            
+            // 回退到第一个找到的元素
+            return allElementsWithText[0];
+          }
+        }
+        
+        // 针对Academics按钮的最后尝试 - 查找顶级导航链接或按钮
+        if (isAcademicsSearch) {
+          const navElements = document.querySelectorAll('nav a, [role="navigation"] [role="menuitem"], .navigation button');
+          
+          for (const el of navElements) {
+            const text = el.textContent || '';
+            if (text.includes('Acad')) {
+              debug(`waitForElement: found Academic in navigation: ${el.tagName}`);
+              return el;
+            }
+          }
+          
+          // 记录页面上的所有按钮，以帮助诊断
+          if (Date.now() - startTime > timeout / 2) { // 只在等待超过一半时间时执行此昂贵操作
+            debug('waitForElement: Academic search timeout approaching, dumping all buttons:');
+            const allButtons = document.querySelectorAll('button, [role="button"]');
+            debug(`Found ${allButtons.length} buttons on page`);
+            for (let i = 0; i < Math.min(allButtons.length, 5); i++) {
+              const btn = allButtons[i];
+              debug(`Button ${i}: ${btn.tagName}, text: "${btn.textContent?.trim() || 'no text'}"`);
+            }
           }
         }
         
