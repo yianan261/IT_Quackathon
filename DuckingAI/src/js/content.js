@@ -324,6 +324,20 @@ class AutomationManager {
     for (const elementInfo of elementsToClick) {
       try {
         debug(`Attempting to click: ${elementInfo.description}`);
+        
+        // 处理等待操作
+        if (elementInfo.action === "wait") {
+          debug(`Waiting for ${elementInfo.duration}ms as requested`);
+          await new Promise(resolve => setTimeout(resolve, elementInfo.duration));
+          results.push({
+            description: elementInfo.description,
+            success: true,
+            action: "wait",
+            duration: elementInfo.duration
+          });
+          continue;
+        }
+        
         const result = await this.clickElement(elementInfo);
         results.push(result);
       } catch (error) {
@@ -370,7 +384,7 @@ class AutomationManager {
 
   // 优化的元素点击功能
   async clickElement(elementInfo) {
-    const { description, selector, fallback_selectors = [], timeout = 5000, wait_before_click = 0 } = elementInfo;
+    const { description, selector, fallback_selectors = [], timeout = 5000, wait_before_click = 0, text_content } = elementInfo;
     
     // 增加特殊日志，跟踪当前正在尝试点击的元素
     debug(`==========================================`);
@@ -426,6 +440,54 @@ class AutomationManager {
         
         debug(`Selected best Academics element: ${bestMatch.tagName}, text: "${bestMatch.textContent.trim()}"`);
         element = bestMatch;
+      }
+    }
+    
+    // 特殊处理：如果有text_content属性，优先查找包含该文本的元素
+    if (text_content && !element) {
+      debug(`Looking for elements with text content: "${text_content}"`);
+      
+      // 先尝试使用标准选择器，再过滤文本内容
+      for (const sel of allSelectors) {
+        try {
+          const elements = Array.from(document.querySelectorAll(sel));
+          if (elements.length > 0) {
+            debug(`Found ${elements.length} elements with selector: ${sel}, filtering by text content`);
+            
+            // 过滤包含指定文本的元素
+            const matchingElements = elements.filter(el => {
+              const elText = (el.textContent || '').trim();
+              return elText.includes(text_content);
+            });
+            
+            if (matchingElements.length > 0) {
+              element = matchingElements[0];
+              debug(`Found element with text "${text_content}". Tag: ${element.tagName}`);
+              break;
+            }
+          }
+        } catch (error) {
+          debug(`Selector error when filtering by text: ${sel} - ${error.message}`);
+        }
+      }
+      
+      // 如果还没找到，尝试查找整个页面中包含该文本的元素
+      if (!element) {
+        debug(`Trying broader search for text content "${text_content}" across all elements`);
+        
+        // 获取所有可能的选项元素（下拉菜单项、列表项等）
+        const potentialElements = Array.from(document.querySelectorAll('[role="option"], li, [data-automation-id*="option"], .dropdown-option, [role="menuitem"]'));
+        
+        // 过滤包含文本的元素
+        const textMatches = potentialElements.filter(el => {
+          const elText = (el.textContent || '').trim();
+          return elText.includes(text_content) && elText.length < text_content.length * 2;
+        });
+        
+        if (textMatches.length > 0) {
+          element = textMatches[0];
+          debug(`Found ${textMatches.length} elements containing "${text_content}" text, using first match: ${element.tagName}`);
+        }
       }
     }
     
@@ -512,11 +574,17 @@ class AutomationManager {
     debug('Scrolling to element');
     element.scrollIntoView({ behavior: 'auto', block: 'center' });
     
+    // 特殊处理：对于搜索输入框和下拉菜单相关的等待
+    let actualWaitTime = wait_before_click;
+    if (description.includes('Start Date') || description.includes('input field')) {
+      debug('This is a search input field, waiting additional time to ensure dropdown can load');
+      actualWaitTime = Math.max(actualWaitTime, 2000); // 至少等待2秒
+    }
+    
     // 只有在明确要求等待时才执行等待
-    // 否则立即点击元素，不进行默认等待
-    if (wait_before_click > 0) {
-      debug(`Waiting ${wait_before_click}ms before clicking as requested`);
-      await new Promise(resolve => setTimeout(resolve, wait_before_click));
+    if (actualWaitTime > 0) {
+      debug(`Waiting ${actualWaitTime}ms before clicking as requested`);
+      await new Promise(resolve => setTimeout(resolve, actualWaitTime));
     } else {
       debug('Clicking element immediately without waiting');
     }
