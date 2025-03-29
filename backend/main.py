@@ -269,23 +269,18 @@ async def test_automation():
             {
                 "action": "click",
                 "description": "Start Date within input field",
-                "selector": "input[aria-labelledby*='startDate'], input[placeholder='Search'][data-uxi-widget-type='selectinput']",  # 主选择器
+                "selector": "input[placeholder='Search']",  # 简化为已知工作的选择器
                 "fallback_selectors": [
                     # 基于自动化ID和类型的选择器
                     "[data-automation-id*='startDate'] input",
                     "[data-uxi-widget-type='selectinput']",
                     
-                    # 基于标签和邻近元素的选择器
-                    "label:contains('Start Date') + div input",
-                    "div:contains('Start Date') input[type='text']",
+                    # 基于属性的选择器 (避免使用不正确的:contains选择器)
+                    "input[aria-labelledby*='startDate']",
+                    "input[type='text'][tabindex='0']",
                     
                     # Workday特有的选择器
-                    ".css-lcr69g-InputContainer-1",
                     "input[tabindex='0'][aria-invalid='false']",
-                    
-                    # 通用搜索框选择器
-                    "input[placeholder='Search']",
-                    "input[enterkeyhint='search']",
                     
                     # 直接选择对话框中的搜索输入框
                     "[aria-modal='true'] input[type='text']",
@@ -295,32 +290,40 @@ async def test_automation():
                 "timeout": 15000,  # 超时时间
                 "critical": True   # 标记为关键操作
             },
+            # 增加一个等待步骤，确保下拉菜单有足够时间显示
+            {
+                "action": "wait",
+                "description": "Wait for dropdown to appear",
+                "duration": 2000  # 等待2秒
+            },
             # 步骤6: 选择 "Semester Academic Calendar" 选项
             {
                 "action": "click",
                 "description": "Semester Academic Calendar option",
-                "selector": "div[title='Semester Academic Calendar'], span:contains('Semester Academic Calendar')",  # 主选择器
+                "selector": "div[title='Semester Academic Calendar'], [role='option']",  # 修改主选择器
                 "fallback_selectors": [
-                    # 基于文本内容的选择器
-                    "[role='option']:contains('Semester Academic Calendar')",
-                    "li:contains('Semester Academic Calendar')",
-                    "div[data-automation-label='Semester Academic Calendar']",
+                    # 基于标准属性的选择器 (避免使用:contains)
+                    "[role='option']",
+                    "[data-automation-label='Semester Academic Calendar']",
                     
                     # 下拉菜单选项通用选择器
                     "[role='listbox'] [role='option']",
-                    "ul.dropdown-list li",
-                    "div.dropdown-option",
+                    ".dropdown-list li",
+                    ".dropdown-option",
                     
                     # Workday特有的选择器
                     "[data-automation-id='promptOption']",
                     "div[data-automation-id*='dropdown'] div[role='option']",
                     
-                    # 直接选择文字包含目标的任何元素
-                    "*:contains('Semester Academic Calendar')"
+                    # 基于文本搜索的辅助 (JavaScript逻辑会处理文本匹配)
+                    "[role='option']",
+                    "li",
+                    "div[role='listitem']"
                 ],
-                "wait_before_click": 1000,  # 点击前等待时间
+                "wait_before_click": 2000,  # 增加点击前等待时间
                 "timeout": 15000,  # 超时时间
-                "critical": True   # 标记为关键操作
+                "critical": True,   # 标记为关键操作
+                "text_content": "Semester Academic Calendar"  # 添加文本内容以便JavaScript搜索
             }
         ],
         "session_id": session_id,  # 使用时间戳确保每次ID不同
