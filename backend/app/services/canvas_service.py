@@ -6,7 +6,6 @@ import logging
 import json
 import re
 from app.core.config import settings
-from openai import OpenAI
 from tzlocal import get_localzone
 from zoneinfo import ZoneInfo
 
@@ -20,9 +19,9 @@ logger = logging.getLogger(__name__)
 class CanvasService:
 
     def __init__(self):
-        self.base_url = settings.CANVAS_API_URL
-        self.headers = {"Authorization": f"Bearer {settings.CANVAS_API_KEY}"}
-        self.client = OpenAI()
+        self.base_url = "https://sit.instructure.com/api/v1/"
+        self.canvas_token = settings.CANVAS_API_KEY
+        self.headers = {"Authorization": f"Bearer {self.canvas_token}"}
 
     def get_current_courses(self) -> List[Dict]:
         """Get list of current courses"""
@@ -108,7 +107,7 @@ class CanvasService:
             course_infos = []
             # The course parameter can be a string, int, or a list of course dicts
             if isinstance(course, str):
-                course_infos = self._extract_course_identifier(course)
+                course_infos = self.extract_course_identifier(course)
                 logger.info(f"======Course info: {course_infos}=======")
                 if not course_infos:
                     logger.warning(f"No course ID found for identifier: {course}")
@@ -217,71 +216,31 @@ class CanvasService:
             logger.error(f"Error formatting assignments response: {str(e)}")
             return "Error retrieving assignment information."
 
-    def _extract_course_identifier(self, query: str) -> List[Dict[str, Any]]:
-        """Extract course IDs from query using available courses"""
+    def extract_course_identifier(self, query: str) -> Dict:
+        """
+        This functionality will now be handled by the Azure agent
+        We'll keep this method as a wrapper for compatibility
+        """
         try:
-            courses = self.get_current_courses()
-            if not courses:
-                logger.warning("No courses found")
-                return []
-            course_context = "\n".join([
-                f"Course ID: {course['id']}, Name: {course['name']}, Code: {course.get('course_code', '')}"
-                for course in courses
-            ])
-            logger.info(f"Course context for LLM: {course_context}")
-            prompt = f"""
-            Given the following list of courses:
-            {course_context}
-
-            And the user query:
-            "{query}"
-
-            Find ALL courses that match the query. Return a JSON array of objects with exact numerical course IDs and full course names.
-            The course IDs must be the complete numerical IDs from the course listing.
-
-            Example format for matches: [
-                {{"id": 78280, "name": "2025S EE 553-A"}},
-                {{"id": 78275, "name": "2025S CS 505-WS/EE 605-WS"}}
-            ]
-            Example format for no matches: []
-
-            Rules:
-            1. Match on course name, code, or subject matter (e.g., "C++" should match "Engineering Programming: C++")
-            2. The IDs must be the full numerical IDs from the course listing
-            3. Return ONLY the JSON array, no other text
-            4. If multiple courses are mentioned (e.g., "C++ and probability"), return all matching courses
-            IMPORTANT: You MUST return ALL courses that match any part of the user query.
-            """
-            messages = [{
-                    "role": "system",
-                    "content": "You are a course matching assistant. Return ONLY the JSON array."
-                }, {
-                    "role": "user",
-                    "content": prompt
-                }]
-            response = self.client.chat.completions.create(
-                    model="gpt-3.5-turbo", messages=messages, temperature=0.3
-                ).choices[0].message.content
-            try:
-                response = response.strip()
-                course_list = json.loads(response)
-                if not isinstance(course_list, list):
-                    raise ValueError("Invalid response format")
-                if not course_list:
-                    logger.info("No matching courses found")
-                    return []
-                validated_courses = [{
-                        "id": int(course["id"]),
-                        "name": course["name"]
-                    } for course in course_list if any(c["id"] == int(course["id"]) for c in courses)]
-                logger.info(f"****Successfully matched courses: {validated_courses}****")
-                return validated_courses
-            except (json.JSONDecodeError, KeyError, ValueError) as e:
-                logger.error(f"Error parsing course info: {str(e)}")
-                return []
+            # The Azure agent will handle the course matching logic
+            return self.get_course_info(query)
         except Exception as e:
             logger.error(f"Error extracting course identifier: {str(e)}")
-            return []
+            return None
+
+    def get_course_info(self, query: str) -> Dict:
+        """Get course information from the Azure agent"""
+        # This would be handled by your Azure agent's course matching logic
+        # For now, return the course data directly from Canvas
+        courses = self.get_current_courses()
+        # Basic matching logic - in production this would be handled by the Azure agent
+        for course in courses:
+            if query.lower() in course["name"].lower():
+                return {
+                    "id": course["id"],
+                    "name": course["name"]
+                }
+        return None
 
     def format_announcements_response(self, announcements_data: Dict) -> str:
         """Format announcements response with error handling, keeping latest 3 announcements per course"""
@@ -368,7 +327,7 @@ class CanvasService:
             # Determine the course list based on the input parameter type
             course_infos = []
             if isinstance(course, str):
-                course_infos = self._extract_course_identifier(course)
+                course_infos = self.extract_course_identifier(course)
                 logger.info(f"Extracted course info from query '{course}': {course_infos}")
                 if not course_infos:
                     logger.warning(f"No course ID found for identifier: {course}")

@@ -18,3 +18,5 @@ langchain-community>=0.2.1
 langchain-core>=0.2.1
 azure-cosmos==4.5.0
 aiohttp==3.8.5
+azure-ai-projects
+azure-identity

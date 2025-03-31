@@ -3,13 +3,17 @@ import os
 import logging
 from app.context import get_service_context
 from fastapi import Depends
+import time
+import pathlib
 
 logging.basicConfig(
     level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
-load_dotenv()
+# Load .env from parent directory
+env_path = pathlib.Path(__file__).parent.parent / '.env'
+load_dotenv(env_path)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

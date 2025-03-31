@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     CANVAS_API_URL: str
     CANVAS_API_KEY: str
 
+    CONN_STR: str
+    AGENT_ID: str
+
     DATABASE_URL: str = "sqlite:///./dummy.db"
 
     COSMOSDB_URI: Optional[str] = None
