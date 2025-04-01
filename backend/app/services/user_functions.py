@@ -104,5 +104,6 @@ user_functions: Set[Callable[..., Any]] = {
     get_academic_calendar_event,
     get_program_requirements,
     get_announcements_for_all_courses,
-    get_announcements_for_specific_courses
+    get_announcements_for_specific_courses,
+
 } 
