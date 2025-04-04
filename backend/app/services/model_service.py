@@ -21,7 +21,6 @@ class ModelService:
         # Initialize Azure AI Project client with connection string
         self.project_client = AIProjectClient.from_connection_string(
             credential=DefaultAzureCredential(), conn_str=settings.CONN_STR)
-
         # Get the existing agent
         self.agent = self.project_client.agents.get_agent(settings.AGENT_ID)
 
