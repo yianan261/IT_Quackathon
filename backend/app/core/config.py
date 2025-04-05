@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
+import os
 
 
 class Settings(BaseSettings):
@@ -21,11 +22,17 @@ class Settings(BaseSettings):
     COSMOSDB_URI: Optional[str] = None
     COSMOSDB_KEY: Optional[str] = None
     COSMOSDB_DATABASE: str = "stevens-ai"
+    
+   #for webpage
+    COSMOS_URI: str | None = None
+    COSMOS_KEY: str | None = None
+    COSMOS_DATABASE: str | None = None
+    COSMOS_CONTAINER: str | None = None
 
     class Config:
         env_file = ".env"
-        case_sensitive = True
-        extra = "allow"
+        # case_sensitive = True
+        # extra = "allow"
 
 
 settings = Settings()

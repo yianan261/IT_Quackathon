@@ -5,6 +5,23 @@ from app.context import get_service_context
 from fastapi import Depends
 import time
 import pathlib
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from app.api import student
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, EmailStr
+from typing import Optional
+
+class Student(BaseModel):
+    studentName: str
+    studentId: str
+    major: str
+    academicLevel: str
+    email: EmailStr
+    
+templates = Jinja2Templates(directory="templates")
+
 
 logging.basicConfig(
     level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -58,6 +75,10 @@ app.add_middleware(
 app.include_router(chat.router, prefix="/api/chat")
 app.include_router(workday.router, prefix="/api/workday")
 
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
+
+app.include_router(student.router, prefix="/api/student")
 
 @app.get("/")
 async def root():
@@ -93,7 +114,6 @@ async def test_canvas_assignments(course_id: int):
         "raw_response": canvas.get_raw_assignments(course_id),
     }
 
-
 # dependency injection for stevens services
 # TODO: need to define these functions
 @app.get("/calendar_events")
@@ -119,8 +139,42 @@ async def test_canvas_annoucements():
         
         "announcements": announcements
     }
+    
 
+@app.get("/test/canvas/grades")
+async def test_canvas_grades_formatted():
+    """Get formatted grades for all courses"""
+    grades = canvas.get_formatted_grades_for_all_courses()
+    return grades
 
+@app.get("/test/canvas/grades/{course_id}")
+async def test_canvas_grades_for_course(course_id: int):
+    """Test endpoint for Canvas Course Grades API"""
+    grades = await canvas.get_formatted_grades_for_course(course_id)  # 添加 await
+    return grades
+
+@app.get("/form")
+async def show_form(request: Request):
+    return templates.TemplateResponse("user_form.html", {"request": request})
+
+@app.post("/api/student")
+async def create_student(student: Student):
+    try:
+        # 暂时只打印接收到的数据
+        print(f"Received student information:")
+        print(f"Name: {student.studentName}")
+        print(f"ID: {student.studentId}")
+        print(f"Major: {student.major}")
+        print(f"Level: {student.academicLevel}")
+        print(f"Email: {student.email}")
+        
+        return JSONResponse(
+            status_code=200,
+            content={"message": "Student information received successfully"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
 if __name__ == "__main__":
     import uvicorn
 

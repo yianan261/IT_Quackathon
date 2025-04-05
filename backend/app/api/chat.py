@@ -54,6 +54,16 @@ def extract_course_reference(message: str) -> str:
             return match.group(1).strip()
     return ""
 
+def needs_student_info(message: str) -> bool:
+    """Check if the message indicates need for student information"""
+    keywords = [
+        'workday', 'register', 'registration', 'enroll', 'enrollment',
+        'add course', 'drop course', 'student info', 'student information'
+    ]
+    message = message.lower()
+    return any(keyword in message for keyword in keywords)
+
+
 
 @router.post("/", response_model=ChatResponse)
 async def chat(
@@ -61,7 +71,19 @@ async def chat(
     canvas_service: CanvasService = Depends(get_canvas_service),
     model_service: ModelService = Depends(get_model_service)
 ) -> ChatResponse:
+    
     try:
+        last_message = request.messages[-1].content
+        
+        if needs_student_info(last_message):
+            return ChatResponse(
+                response="""To help you better with Workday navigation, I'll need some information about you. 
+                Please fill out the student information form at:
+                
+                http://localhost:8000/form
+                
+                After submitting the form, I'll be able to provide more personalized assistance with Workday navigation."""
+            )
         # Get completion from Azure agent
         response = await model_service.get_completion(
             messages=[{
