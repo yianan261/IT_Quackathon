@@ -60,14 +60,23 @@ class CanvasService:
     def find_course_by_name(self, search_term: str) -> Dict:
         """Find a course by partial name match"""
         logger.info(f"Searching for course with term: '{search_term}'")
-        course_id = self.extract_course_identifier(search_term)
-        if course_id:
-            search_term = course_id
-        logger.debug(f"Using search term: '{search_term}'")
+        course_ids = self.extract_course_identifier(search_term)
+        if course_ids and len(course_ids) > 0:
+            # Use the first match
+            course_id = course_ids[0]["id"]
+            courses = self.get_current_courses()
+            course = next((c for c in courses if c["id"] == course_id), None)
+            if course:
+                logger.info(f"Found matching course: {course.get('name')}")
+                return course
+
+        # Fallback to direct search
+        logger.debug(f"Using direct search for term: '{search_term}'")
         courses = self.get_current_courses()
         if not courses:
             logger.warning("No courses retrieved to search through")
             return None
+
         search_term = search_term.lower()
         for course in courses:
             course_code = course.get("course_code", "").lower()
@@ -131,28 +140,35 @@ class CanvasService:
                         "id": course_id,
                         "name": course_info["name"]
                     }]
+
             local_tz = get_localzone()
             all_courses_assignments = []
+
             for course_info in course_infos:
                 course_id = course_info["id"]
                 logger.info(
                     f"======Processing assignments for course {course_info['name']} with ID {course_id}===="
                 )
+
                 url = f"{self.base_url}/courses/{course_id}/assignments"
                 logger.info(f"Fetching assignments from: {url}")
                 response = requests.get(url,
                                         headers=self.headers,
                                         params={"include[]": ["submission"]})
+
                 if response.status_code != 200:
                     logger.error(
                         f"Error response for assignments: {response.text}")
                     continue
+
                 assignments = response.json()
                 logger.info(f"Retrieved {len(assignments)} total assignments")
+
                 now = datetime.now(timezone.utc)
                 # Get assignments due in the next 2 weeks
                 two_weeks_from_now = now + timedelta(weeks=2)
                 upcoming_assignments = []
+
                 for assignment in assignments:
                     due_at = assignment.get("due_at")
                     if due_at:
@@ -181,6 +197,7 @@ class CanvasService:
                         except ValueError as e:
                             logger.error(
                                 f"Error parsing date {due_at}: {str(e)}")
+
                 upcoming_assignments.sort(key=lambda x: x["due_at"])
                 all_courses_assignments.append({
                     "course_name":
@@ -188,6 +205,7 @@ class CanvasService:
                     "assignments":
                     upcoming_assignments,
                 })
+
             logger.info(
                 f"Retrieved assignments for {len(all_courses_assignments)} courses"
             )
@@ -197,28 +215,61 @@ class CanvasService:
                 f"Error fetching assignments for course {course}: {str(e)}")
             return {"courses": []}
 
-    def extract_course_identifier(self, query: str) -> Dict:
-        """
-        This functionality will now be handled by the Azure agent
-        We'll keep this method as a wrapper for compatibility
-        """
+    def format_courses_response(self, courses: List[Dict]) -> str:
+        """Format courses response with error handling"""
         try:
-            # The Azure agent will handle the course matching logic
-            return self.get_course_info(query)
+            if not courses:
+                return "No courses found."
+            response_parts = ["📚 Your Current Courses:"]
+            for course in courses:
+                course_name = course.get("name", "Unknown Course")
+                course_code = course.get("course_code", "")
+                response_parts.append(f"  • {course_name} ({course_code})")
+            return "\n".join(response_parts)
+        except Exception as e:
+            logger.error(f"Error formatting courses response: {str(e)}")
+            return "Error formatting courses information."
+
+    def extract_course_identifier(self, search_term: str) -> List[Dict]:
+        """Extract course identifier from search term"""
+        logger.info(f"Extracting course identifier from: '{search_term}'")
+        try:
+            # First try to find an exact match
+            courses = self.get_current_courses()
+            if not courses:
+                logger.warning("No courses available to search through")
+                return []
+
+            # Try to find a course by ID if the search term is numeric
+            if search_term.isdigit():
+                course_id = int(search_term)
+                course = next((c for c in courses if c["id"] == course_id),
+                              None)
+                if course:
+                    logger.info(f"Found course by ID: {course['name']}")
+                    return [{"id": course["id"], "name": course["name"]}]
+
+            # Try to find a course by name or code
+            search_term = search_term.lower()
+            matches = []
+            for course in courses:
+                course_code = course.get("course_code", "").lower()
+                course_name = course.get("name", "").lower()
+                if (search_term in course_code or search_term in course_name
+                        or search_term in course.get("name", "").lower()):
+                    logger.info(f"Found matching course: {course.get('name')}")
+                    matches.append({
+                        "id": course["id"],
+                        "name": course["name"]
+                    })
+
+            if matches:
+                return matches
+            logger.warning(f"No course found matching: '{search_term}'")
+            return []
         except Exception as e:
             logger.error(f"Error extracting course identifier: {str(e)}")
-            return None
-
-    def get_course_info(self, query: str) -> Dict:
-        """Get course information from the Azure agent"""
-        # This would be handled by your Azure agent's course matching logic
-        # For now, return the course data directly from Canvas
-        courses = self.get_current_courses()
-        # Basic matching logic - in production this would be handled by the Azure agent
-        for course in courses:
-            if query.lower() in course["name"].lower():
-                return {"id": course["id"], "name": course["name"]}
-        return None
+            return []
 
     def get_announcements_for_course(
             self, course: Union[int, str, List[Dict]]) -> Dict:
@@ -228,7 +279,7 @@ class CanvasService:
         Parameters:
             course (Union[int, str, List[Dict]]):
                 - If an integer, represents a single course ID;
-                - If a string, represents a course name or keyword (will be parsed via _extract_course_identifier);
+                - If a string, represents a course name or keyword (will be parsed via extract_course_identifier);
                 - If a list, it should be a list of course dictionaries (each must contain at least "id" and "name").
 
         Returns:
@@ -268,7 +319,9 @@ class CanvasService:
 
             results = []
             now = datetime.now(timezone.utc)
-            one_week_ago = now - timedelta(days=7)
+            # One week in the past to capture recent announcements
+            one_week_ago = now - timedelta(weeks=1)
+
             # Iterate over each course and get announcements
             for course_info in course_infos:
                 course_id = course_info["id"]
@@ -290,16 +343,18 @@ class CanvasService:
                         f"Error response for announcements (course {course_id}): {response.text}"
                     )
                     continue
+
                 announcements = response.json()
                 ann_list = []
+
                 for ann in announcements:
                     posted_at = ann.get("posted_at")
-                    # Filter for future announcements (if posted_at is in the future)
+                    # Include only recent or future announcements
                     if posted_at:
                         try:
                             posted_date_utc = datetime.fromisoformat(
                                 posted_at.replace("Z", "+00:00"))
-                            # Only include announcements from past week onwards
+                            # Include announcements from the past week or future announcements
                             if posted_date_utc >= one_week_ago:
                                 ann_list.append({
                                     "title":
@@ -321,14 +376,14 @@ class CanvasService:
                                     ann.get("message", "")
                                 })
                                 logger.info(
-                                    f"Found future announcement: {ann.get('title')} posted at {posted_date_utc}"
+                                    f"Found announcement: {ann.get('title')} posted at {posted_date_utc}"
                                 )
                         except ValueError as e:
                             logger.error(
                                 f"Error parsing date {posted_at}: {str(e)}")
 
-                # Sort announcements chronologically (nearest future date first)
-                ann_list.sort(key=lambda x: x["posted_at"])
+                # Sort announcements by date (newest first)
+                ann_list.sort(key=lambda x: x["posted_at"], reverse=True)
 
                 results.append({
                     "course_name": course_name,
@@ -336,6 +391,7 @@ class CanvasService:
                     f"https://sit.instructure.com/courses/{course_id}/announcements",
                     "announcements": ann_list
                 })
+
             return {"courses": results}
         except Exception as e:
             logger.error(
@@ -346,13 +402,6 @@ class CanvasService:
     def get_announcements_for_all_courses(self) -> Dict:
         """
         Get announcements for all current courses.
-
-        This function retrieves all current courses via get_current_courses,
-        then calls get_announcements_for_course with the list of courses to get
-        announcements for each course.
-
-        Returns:
-            Dict: In the format {"courses": [ { "course_name": ..., "announcements": [ {...}, ... ] }, ... ] }.
         """
         try:
             all_courses = self.get_current_courses()
@@ -366,148 +415,3 @@ class CanvasService:
             logger.error(
                 f"Error fetching announcements for all courses: {str(e)}")
             return {"courses": []}
-        
-    def get_grades_for_course(self, course: Union[int, str, List[Dict]]) -> Dict:
-        """
-        Get grades for a specific course or courses.
-        
-        Parameters:
-            course (Union[int, str, List[Dict]]):
-                - If an integer, represents a single course ID;
-                - If a string, represents a course name or keyword (will be parsed via _extract_course_identifier);
-                - If a list, it should be a list of course dictionaries (each must contain at least "id" and "name").
-                
-        Returns:
-            Dict: In the format {"courses": [ { "course_name": ..., "grades": {...} }, ... ] }
-        """
-        try:
-            # Determine the course list based on the input parameter type
-            course_infos = []
-            if isinstance(course, str):
-                course_infos = self._extract_course_identifier(course)
-                logger.info(f"Extracted course info from query '{course}': {course_infos}")
-                if not course_infos:
-                    logger.warning(f"No course ID found for identifier: {course}")
-                    return {"courses": []}
-            elif isinstance(course, list):
-                course_infos = course
-            else:  # assume integer course id
-                courses = self.get_current_courses()
-                course_info = next((c for c in courses if c["id"] == course), None)
-                if course_info:
-                    course_infos = [{"id": course, "name": course_info["name"]}]
-                else:
-                    logger.warning(f"No course found with ID: {course}")
-                    return {"courses": []}
-                    
-            results = []
-            # Iterate over each course and get grades
-            for course_info in course_infos:
-                course_id = course_info["id"]
-                course_name = course_info["name"]
-                
-                # First get all assignments for the course
-                assignments_url = f"{self.base_url}/courses/{course_id}/assignments"
-                logger.info(f"Fetching assignments for course {course_name} (ID: {course_id}) from: {assignments_url}")
-                assignments_response = requests.get(assignments_url, headers=self.headers)
-                
-                if assignments_response.status_code != 200:
-                    logger.error(f"Error response for assignments (course {course_id}): {assignments_response.text}")
-                    continue
-                
-                assignments = assignments_response.json()
-                
-                # Now get the submissions for these assignments
-                submissions_url = f"{self.base_url}/courses/{course_id}/students/submissions"
-                params = {
-                    "student_ids[]": "self",  # get submissions for the current user
-                    "include[]": ["assignment", "submission_comments", "rubric_assessment", "score", "user"]
-                }
-                
-                logger.info(f"Fetching submissions for course {course_name} (ID: {course_id}) from: {submissions_url}")
-                submissions_response = requests.get(submissions_url, headers=self.headers, params=params)
-                
-                if submissions_response.status_code != 200:
-                    logger.error(f"Error response for submissions (course {course_id}): {submissions_response.text}")
-                    continue
-                
-                submissions = submissions_response.json()
-                
-                # Get course total grade
-                enrollment_url = f"{self.base_url}/courses/{course_id}/enrollments"
-                params = {
-                    "user_id": "self"
-                }
-                
-                logger.info(f"Fetching enrollment/grade data for course {course_name} (ID: {course_id}) from: {enrollment_url}")
-                enrollment_response = requests.get(enrollment_url, headers=self.headers, params=params)
-                
-                course_grade = None
-                if enrollment_response.status_code == 200:
-                    enrollments = enrollment_response.json()
-                    if enrollments and len(enrollments) > 0:
-                        for enrollment in enrollments:
-                            if enrollment.get("type") == "StudentEnrollment":
-                                course_grade = {
-                                    "current_grade": enrollment.get("grades", {}).get("current_grade"),
-                                    "current_score": enrollment.get("grades", {}).get("current_score"),
-                                    "final_grade": enrollment.get("grades", {}).get("final_grade"),
-                                    "final_score": enrollment.get("grades", {}).get("final_score")
-                                }
-                                break
-                
-                # Process submissions data
-                processed_submissions = []
-                for submission in submissions:
-                    assignment_id = submission.get("assignment_id")
-                    assignment = next((a for a in assignments if a["id"] == assignment_id), None)
-                    
-                    if assignment:
-                        processed_submissions.append({
-                            "assignment_name": assignment.get("name", "Unknown Assignment"),
-                            "assignment_id": assignment_id,
-                            "score": submission.get("score"),
-                            "grade": submission.get("grade"),
-                            "points_possible": assignment.get("points_possible"),
-                            "submitted_at": submission.get("submitted_at"),
-                            "late": submission.get("late", False),
-                            "missing": submission.get("missing", False),
-                            "submission_type": submission.get("submission_type"),
-                            "submission_url": submission.get("html_url"),
-                            "assignment_url": assignment.get("html_url")
-                        })
-                
-                results.append({
-                    "course_name": course_name,
-                    "course_id": course_id,
-                    "course_grade": course_grade,
-                    "grades_url": f"https://sit.instructure.com/courses/{course_id}/grades",
-                    "submissions": processed_submissions
-                })
-                
-            return {"courses": results}
-        except Exception as e:
-            logger.error(f"Error fetching grades for course {course}: {str(e)}", exc_info=True)
-            return {"courses": []}
-    
-    def get_grades_for_all_courses(self) -> Dict:
-        """
-        Get grades for all current courses.
-        
-        This function retrieves all current courses via get_current_courses,
-        then calls get_grades_for_course with the list of courses to get
-        grades for each course.
-        
-        Returns:
-            Dict: In the format {"courses": [ { "course_name": ..., "grades": {...} }, ... ] }
-        """
-        try:
-            all_courses = self.get_current_courses()
-            course_infos = [{"id": course["id"], "name": course["name"]} for course in all_courses]
-            grades = self.get_grades_for_course(course_infos)
-            return grades
-        except Exception as e:
-            logger.error(f"Error fetching grades for all courses: {str(e)}")
-            return {"courses": []}
-
- 

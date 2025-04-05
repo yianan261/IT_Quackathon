@@ -1,9 +1,8 @@
 from typing import List, Dict, Optional, Any
 import logging
-from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
+from azure.ai.projects import AIProjectClient
 from pydantic import BaseModel
-from azure.ai.projects.models import FunctionTool, ToolSet
 from app.services.user_functions import user_functions
 from app.core.config import settings
 
@@ -18,14 +17,12 @@ class ChatMessage(BaseModel):
 class ModelService:
 
     def __init__(self):
-        # Initialize Azure AI Project client with connection string
+        # Initialize Azure AI Project client with connection string only
         self.project_client = AIProjectClient.from_connection_string(
             credential=DefaultAzureCredential(), conn_str=settings.CONN_STR)
+
         # Get the existing agent
         self.agent = self.project_client.agents.get_agent(settings.AGENT_ID)
-
-        self.toolset = ToolSet()
-        self.toolset.add(FunctionTool(user_functions))
 
     async def get_completion(self,
                              messages: List[Dict[str, str]],
@@ -46,22 +43,33 @@ class ModelService:
                     role=message["role"],
                     content=message["content"])
 
+            # Add system message with simplified guidance
+            system_message = (
+                "You are a helpful assistant with access to Stevens Institute of Technology information. "
+                "Use available tools as needed to answer the user's request.")
+
+            self.project_client.agents.create_message(thread_id=thread.id,
+                                                      role="system",
+                                                      content=system_message)
+
             # Process the conversation with the agent
             run = self.project_client.agents.create_and_process_run(
                 thread_id=thread.id,
                 agent_id=self.agent.id,
-                toolset=self.toolset)
-            print("[DEBUG] Run status:", run.status)
+                tools=user_functions)
+            logger.info(f"Run status: {run.status}")
 
             # Get the agent's response
             messages = self.project_client.agents.list_messages(
                 thread_id=thread.id)
-            print("&&&&&&&&&&& MESSAGES: ", messages, "&&&&&&&&&&&")
+            logger.debug(f"Messages: {messages}")
+
             # Debug: Print out all text messages
             for m in messages.data:
                 if m.content and m.content[0].text:
-                    print(f"[DEBUG] Agent Message (role={m.role}):",
-                          m.content[0].text.value)
+                    logger.debug(
+                        f"Agent Message (role={m.role}): {m.content[0].text.value}"
+                    )
 
             # Handle empty case
             if not messages.data:
@@ -139,13 +147,23 @@ class ModelService:
 
             # Process with the agent
             run = self.project_client.agents.create_and_process_run(
-                thread_id=thread.id, agent_id=self.agent.id)
+                thread_id=thread.id,
+                agent_id=self.agent.id,
+                tools=user_functions)
 
             # Get the response
             messages = self.project_client.agents.list_messages(
                 thread_id=thread.id)
-            return messages.data[
-                -1].text if messages.data and messages.data[-1].text else ""
+            latest_message = next(
+                (m for m in reversed(messages.data) if m.role == "assistant"),
+                None)
+
+            if not latest_message or not latest_message.content:
+                return "I apologize, but I encountered an error generating a response."
+
+            content = latest_message.content[
+                0].text.value if latest_message.content[0].text else ""
+            return content
 
         except Exception as e:
             logger.error(f"Error generating response: {str(e)}")
