@@ -509,5 +509,3 @@ class CanvasService:
         except Exception as e:
             logger.error(f"Error fetching grades for all courses: {str(e)}")
             return {"courses": []}
-
- 
