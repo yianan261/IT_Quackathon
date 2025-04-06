@@ -79,6 +79,42 @@ python -m app.services.test_workday --action validate
 python -m app.services.test_workday --action register --course "CS 101"
 ```
 
+#### Mock Mode for Testing
+
+The Workday service includes a "mock mode" that can be used for testing or in environments where Playwright is not available. This mode simulates browser operations without actually launching a browser.
+
+To use mock mode:
+
+1. In your code:
+
+   ```python
+   workday_service = WorkdayService(mock_for_testing=True)
+   ```
+
+2. In user functions:
+
+   ```json
+   {
+     "function": "login_to_workday",
+     "arguments": {
+       "username": "your_username",
+       "password": "your_password",
+       "mock_mode": true
+     }
+   }
+   ```
+
+3. In the test script:
+   ```bash
+   python -m app.services.test_workday --action login --mock
+   ```
+
+Mock mode is useful for:
+
+- Development and testing without installing Playwright
+- CI/CD pipelines where browser installation is not available
+- Quick testing of API integration without browser overhead
+
 ### Browser Utilities
 
 The `browser_utils` directory contains utilities for browser automation, including a wrapper around Playwright that provides methods for common browser operations. These utilities are used by the Workday service but can also be used by other services that require browser automation.

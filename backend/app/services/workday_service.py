@@ -1,10 +1,61 @@
-from .browser_utils.browser_control import BrowserControl
 import logging
 import os
 import time
 from typing import Dict, Optional, Any
 
+# Set up logger
 logger = logging.getLogger(__name__)
+
+# Try to import the BrowserControl, but provide a mock if it fails
+try:
+    from .browser_utils.browser_control import BrowserControl, PLAYWRIGHT_AVAILABLE, BROWSER_AVAILABLE
+    if PLAYWRIGHT_AVAILABLE and BROWSER_AVAILABLE:
+        logger.info("Playwright and browser binaries are fully available")
+    elif PLAYWRIGHT_AVAILABLE and not BROWSER_AVAILABLE:
+        logger.warning(
+            "Playwright is installed but browser binaries are missing")
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
+    BROWSER_AVAILABLE = False
+    logger.warning("Playwright import failed - mock mode will be used")
+
+
+# Create a mock for environments where the browser isn't available
+class MockBrowserControl:
+    """Mock browser control for environments without Playwright"""
+
+    def __init__(self, *args, **kwargs):
+        self.logged_in = False
+        logger.warning(
+            "Using mock browser control - real browser operations will be simulated"
+        )
+
+    def goto(self, url):
+        pass
+
+    def get_html(self):
+        return "<html><body><p>Mock HTML</p></body></html>"
+
+    def save_html(self, step_name):
+        return f"mock_{step_name}.html"
+
+    def click_text(self, *args, **kwargs):
+        pass
+
+    def fill_input(self, *args, **kwargs):
+        pass
+
+    def wait_for_selector(self, *args, **kwargs):
+        pass
+
+    def wait_for_navigation(self, *args, **kwargs):
+        pass
+
+    def screenshot(self, path, *args, **kwargs):
+        return path
+
+    def close(self):
+        pass
 
 
 class WorkdayService:
@@ -14,15 +65,42 @@ class WorkdayService:
     navigation, and data extraction.
     """
 
-    def __init__(self, headless=False):
+    def __init__(self, headless=False, mock_for_testing=False):
         """
         Initialize a Workday service instance.
         
         Args:
             headless (bool): Whether to run browser in headless mode
+            mock_for_testing (bool): Use a mock browser for testing without Playwright
         """
         logger.info("Initializing Workday service")
-        self.browser = BrowserControl(headless=headless)
+
+        # Determine if we should use mock mode
+        use_mock = mock_for_testing or not (PLAYWRIGHT_AVAILABLE
+                                            and BROWSER_AVAILABLE)
+
+        if use_mock:
+            self.browser = MockBrowserControl(headless=headless)
+            self.using_mock = True
+            message = "Using mock browser control - real browser operations will be simulated"
+            if mock_for_testing:
+                message += " (mock_for_testing=True)"
+            if not PLAYWRIGHT_AVAILABLE:
+                message += " (Playwright not installed)"
+            if PLAYWRIGHT_AVAILABLE and not BROWSER_AVAILABLE:
+                message += " (Browser binaries missing)"
+            logger.warning(message)
+        else:
+            try:
+                self.browser = BrowserControl(headless=headless)
+                self.using_mock = False
+                logger.info("Using real browser automation with Playwright")
+            except Exception as e:
+                logger.error(f"Failed to initialize browser: {str(e)}")
+                logger.warning("Falling back to mock browser")
+                self.browser = MockBrowserControl(headless=headless)
+                self.using_mock = True
+
         self.base_url = "https://www.stevens.edu/it/services/workday"
         self.logged_in = False
 

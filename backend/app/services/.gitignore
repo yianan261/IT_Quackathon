@@ -1,0 +1,8 @@
+# Ignore config file with credentials
+config.json
+
+# Ignore browser dumps
+browser_dumps/
+
+# Ignore screenshots 
+*.png 

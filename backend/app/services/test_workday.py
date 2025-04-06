@@ -45,6 +45,9 @@ def main():
         '--screenshot',
         action='store_true',
         help='Take screenshot when extracting (final pages only)')
+    parser.add_argument('--mock',
+                        action='store_true',
+                        help='Use mock mode (no Playwright required)')
 
     args = parser.parse_args()
 
@@ -59,7 +62,8 @@ def main():
         return
 
     # Create the Workday service
-    workday = WorkdayService(headless=args.headless)
+    workday = WorkdayService(headless=args.headless,
+                             mock_for_testing=args.mock)
 
     try:
         if args.action == 'login':

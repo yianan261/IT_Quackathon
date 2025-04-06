@@ -8,6 +8,8 @@ import logging
 import json
 from app.services.canvas_service import CanvasService
 from app.services.stevens_service import StevensService
+from app.services.workday_service import WorkdayService
+from app.services.user_service import UserService
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -25,6 +27,14 @@ def get_stevens_service():
 
 def get_model_service():
     return ModelService()
+
+
+def get_workday_service():
+    return WorkdayService(headless=False, mock_for_testing=False)
+
+
+def get_user_service():
+    return UserService()
 
 
 class ChatMessage(BaseModel):
@@ -58,7 +68,6 @@ def extract_course_reference(message: str) -> str:
 @router.post("/", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
-    canvas_service: CanvasService = Depends(get_canvas_service),
     model_service: ModelService = Depends(get_model_service)
 ) -> ChatResponse:
     try:

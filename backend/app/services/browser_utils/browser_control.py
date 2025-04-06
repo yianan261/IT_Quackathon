@@ -1,9 +1,43 @@
-from playwright.sync_api import sync_playwright
-import logging
+import sys
 import os
+import logging
+import subprocess
+from typing import Optional
 from datetime import datetime
 
+# Configure logging
 logger = logging.getLogger(__name__)
+
+# Try to import Playwright with better error handling
+PLAYWRIGHT_AVAILABLE = False
+BROWSER_AVAILABLE = False
+
+try:
+    from playwright.sync_api import sync_playwright
+    PLAYWRIGHT_AVAILABLE = True
+
+    # Check if browsers are installed by actually trying to launch
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            browser.close()
+        BROWSER_AVAILABLE = True
+        logger.info("Playwright and browser binaries are available")
+    except Exception as e:
+        logger.warning(
+            f"Playwright is installed but browser binaries may be missing: {str(e)}"
+        )
+        logger.warning("You may need to run: playwright install")
+
+except ImportError:
+    logger.error("Playwright not found. Please install it using:")
+    logger.error("    pip install playwright")
+    logger.error("    playwright install")
+    logger.error("Or if using conda:")
+    logger.error("    conda config --add channels conda-forge")
+    logger.error("    conda config --add channels microsoft")
+    logger.error("    conda install playwright")
+    logger.error("    playwright install")
 
 
 class BrowserControl:
@@ -13,20 +47,31 @@ class BrowserControl:
     clicking elements, and extracting HTML content.
     """
 
-    def __init__(self, headless=True, slow_mo=100):
+    def __init__(self, headless=True, slow_mo=500, debug_wait=2000):
         """
         Initialize a browser controller with Playwright.
         
         Args:
             headless (bool): Whether to run browser in headless mode
             slow_mo (int): Slow down operations by this amount of milliseconds
+            debug_wait (int): Additional wait time in milliseconds for debugging
         """
+        if not PLAYWRIGHT_AVAILABLE:
+            raise ImportError("Playwright not installed or not available")
+
         logger.info(f"Initializing browser controller (headless={headless})")
-        self.playwright = sync_playwright().start()
-        self.browser = self.playwright.chromium.launch(headless=headless,
-                                                       slow_mo=slow_mo)
-        self.page = self.browser.new_page()
-        self.page.set_viewport_size({"width": 1280, "height": 800})
+
+        try:
+            self.playwright = sync_playwright().start()
+            self.browser = self.playwright.chromium.launch(headless=headless,
+                                                           slow_mo=slow_mo)
+            self.page = self.browser.new_page()
+            self.page.set_viewport_size({"width": 1280, "height": 800})
+            self.debug_wait = debug_wait
+        except Exception as e:
+            logger.error(f"Failed to initialize browser: {str(e)}")
+            logger.error("You may need to run: playwright install")
+            raise
 
         # Create directory for HTML dumps if it doesn't exist
         os.makedirs("browser_dumps", exist_ok=True)
@@ -36,6 +81,8 @@ class BrowserControl:
         logger.info(f"Navigating to {url}")
         self.page.goto(url)
         self.page.wait_for_load_state("load")
+        # Add debug wait
+        self.page.wait_for_timeout(self.debug_wait)
 
     def get_html(self) -> str:
         """Get the HTML content of the current page."""
@@ -80,8 +127,12 @@ class BrowserControl:
                 self.page.wait_for_selector(selector,
                                             timeout=timeout,
                                             state='visible')
+                # Add debug wait before clicking
+                self.page.wait_for_timeout(self.debug_wait)
                 self.page.click(selector)
                 logger.info(f"Successfully clicked element with {selector}")
+                # Add debug wait after clicking
+                self.page.wait_for_timeout(self.debug_wait)
                 return
             except Exception as e:
                 if attempt < retry_count:
@@ -101,6 +152,8 @@ class BrowserControl:
         logger.info(
             f"Filling input {selector} with value (hidden for privacy)")
         self.page.fill(selector, value)
+        # Add debug wait after filling
+        self.page.wait_for_timeout(self.debug_wait)
 
     def wait_for_selector(self, selector: str, timeout=30000):
         """Wait for an element matching the selector to appear."""
@@ -111,6 +164,8 @@ class BrowserControl:
         """Wait for navigation to complete."""
         logger.info("Waiting for navigation to complete")
         self.page.wait_for_load_state("networkidle")
+        # Add debug wait after navigation
+        self.page.wait_for_timeout(self.debug_wait)
 
     def screenshot(self, path: str, full_page: bool = True):
         """

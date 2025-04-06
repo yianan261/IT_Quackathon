@@ -10,6 +10,9 @@ class Settings(BaseSettings):
 
     VECTOR_DB_PATH: str = "vector_db"
 
+    WORKDAY_USERNAME: Optional[str] = None
+    WORKDAY_PASSWORD: Optional[str] = None
+
     CANVAS_API_URL: str
     CANVAS_API_KEY: str
 
