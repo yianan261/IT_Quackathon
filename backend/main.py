@@ -12,6 +12,25 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
 from typing import Optional
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+import asyncio
+from app.api.student import router as student_router
+# ...
+
+
+class TimeoutMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        try:
+            async with asyncio.timeout(50):  # 10-second global timeout
+                return await call_next(request)
+        except asyncio.TimeoutError:
+            return JSONResponse(
+                status_code=504,
+                content={"message": "Request timed out"}
+            )
+            
+
 
 class Student(BaseModel):
     studentName: str
@@ -27,6 +46,7 @@ logging.basicConfig(
     level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
 
 # Load .env from parent directory
 env_path = pathlib.Path(__file__).parent.parent / '.env'
@@ -61,7 +81,8 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
-
+# Add the middleware
+app.add_middleware(TimeoutMiddleware)
 # cors
 app.add_middleware(
     CORSMiddleware,
@@ -78,7 +99,8 @@ app.include_router(workday.router, prefix="/api/workday")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-app.include_router(student.router, prefix="/api/student")
+# app.include_router(student.router, prefix="/api/student")
+app.include_router(student_router, prefix="/api/student", tags=["student"])
 
 @app.get("/")
 async def root():
@@ -157,25 +179,7 @@ async def test_canvas_grades_for_course(course_id: int):
 async def show_form(request: Request):
     return templates.TemplateResponse("user_form.html", {"request": request})
 
-@app.post("/api/student")
-async def create_student(student: Student):
-    try:
-        # 暂时只打印接收到的数据
-        print(f"Received student information:")
-        print(f"Name: {student.studentName}")
-        print(f"ID: {student.studentId}")
-        print(f"Major: {student.major}")
-        print(f"Level: {student.academicLevel}")
-        print(f"Email: {student.email}")
-        
-        return JSONResponse(
-            status_code=200,
-            content={"message": "Student information received successfully"}
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
     
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(app, host="0.0.0.0", port=8000)

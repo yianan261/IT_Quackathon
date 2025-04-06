@@ -24,10 +24,11 @@ class Settings(BaseSettings):
     COSMOSDB_DATABASE: str = "stevens-ai"
     
    #for webpage
+    COSMOS_ENDPOINT: str
     COSMOS_URI: str | None = None
-    COSMOS_KEY: str | None = None
-    COSMOS_DATABASE: str | None = None
-    COSMOS_CONTAINER: str | None = None
+    COSMOS_KEY: str
+    COSMOS_DATABASE: str = "stevens-ai"
+    COSMOS_CONTAINER: str = "students"
 
     class Config:
         env_file = ".env"

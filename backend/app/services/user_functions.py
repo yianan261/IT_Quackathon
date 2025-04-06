@@ -2,10 +2,12 @@ from typing import Any, Set, Callable
 import json
 from app.services.canvas_service import CanvasService
 from app.services.stevens_service import StevensService
+from app.services.cosmos_service import CosmosService
 
 # Create singleton instances
 _canvas_service = CanvasService()
 _stevens_service = StevensService()
+_cosmos_service = CosmosService()
 
 def get_course_assignments(course_identifier: str) -> str:
     """
@@ -96,6 +98,50 @@ def get_announcements_for_specific_courses(course_identifier: str) -> str:
     announcements = _canvas_service.get_announcements_for_course(course_identifier)
     return json.dumps(announcements)
 
+def get_grades() -> str:
+    """
+    Get grades for all courses.
+
+    :return: JSON string containing grades for all courses
+    """
+    try:
+        grades = _canvas_service.get_formatted_grades_for_all_courses()
+        return json.dumps(grades)
+    except Exception as e:
+        logger.error(f"Error getting grades: {str(e)}")
+        return json.dumps({"error": str(e)})
+
+def get_course_grades(course_id: str) -> str:
+    """
+    Get grades for a specific course.
+
+    :param course_id: Course ID
+    :return: JSON string containing grades for the specified course
+    """
+    try:
+        grades = _canvas_service.get_formatted_grades_for_course(course_id)
+        return json.dumps(grades)
+    except Exception as e:
+        logger.error(f"Error getting course grades: {str(e)}")
+        return json.dumps({"error": str(e)})
+
+async def get_student_info(student_id: str = None) -> str:
+    """
+    Get student information from the database.
+    
+    Args:
+        student_id (str, optional): Specific student ID to query. 
+                                  If None, returns all students.
+    
+    Returns:
+        str: Formatted student information
+    """
+    try:
+        context = await _cosmos_service.get_student_context(student_id)
+        return json.dumps(context)  # 确保返回的是字符串
+    except Exception as e:
+        logger.error(f"Error getting student info: {str(e)}")
+        return json.dumps({"error": f"Error retrieving student information: {str(e)}"})
 # Register all functions
 user_functions: Set[Callable[..., Any]] = {
     get_course_assignments,
@@ -105,5 +151,7 @@ user_functions: Set[Callable[..., Any]] = {
     get_program_requirements,
     get_announcements_for_all_courses,
     get_announcements_for_specific_courses,
-
+    get_grades,           # Add this
+    get_course_grades,  
+    get_student_info
 } 

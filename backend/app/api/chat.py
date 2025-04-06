@@ -8,6 +8,11 @@ import logging
 import json
 from app.services.canvas_service import CanvasService
 from app.services.stevens_service import StevensService
+from fastapi import BackgroundTasks
+from starlette.requests import Request
+import asyncio
+from app.services.user_functions import get_student_info
+
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -71,10 +76,11 @@ async def chat(
     canvas_service: CanvasService = Depends(get_canvas_service),
     model_service: ModelService = Depends(get_model_service)
 ) -> ChatResponse:
-    
     try:
-        last_message = request.messages[-1].content
+        last_message = request.messages[-1].content.lower()
+        logger.info(f"Received message: {last_message}")
         
+        # Check if student information is needed
         if needs_student_info(last_message):
             return ChatResponse(
                 response="""To help you better with Workday navigation, I'll need some information about you. 
@@ -84,7 +90,38 @@ async def chat(
                 
                 After submitting the form, I'll be able to provide more personalized assistance with Workday navigation."""
             )
-        # Get completion from Azure agent
+        
+        # Check if this is a grade query
+        if "grades" in last_message and "course" in last_message:
+            # Extract course query string
+            course_query = last_message.split("course")[-1].strip().lower()
+            course_query = course_query.replace("in", "").replace("for", "").strip()
+            
+            # Use canvas_service to handle grade query
+            grades_response = canvas_service.get_grades_by_course_query(course_query)
+            return ChatResponse(response=grades_response)
+        
+        # ... existing code ...
+
+        if "student" in last_message:
+            # Extract student ID if present
+            student_id = None
+            id_match = re.search(r'student (?:id\s+)?(\d+)', last_message)
+            if id_match:
+                student_id = id_match.group(1)
+            
+            # Get student information and await the result
+            student_info = await get_student_info(student_id)
+            
+            # Add student information to message context
+            context_message = ChatMessage(
+                role="assistant",
+                content=f"Here is the relevant student information:\n{student_info}"
+            )
+            request.messages.insert(-1, context_message)
+
+
+        # Handle other messages
         response = await model_service.get_completion(
             messages=[{
                 "role": msg.role,
