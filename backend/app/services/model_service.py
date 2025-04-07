@@ -44,7 +44,7 @@ class ModelService:
                 endpoint=self.search_connection.endpoint_url,
                 credential=AzureKeyCredential(key=self.search_connection.key),
             )
-            self.rag_enabled = True
+            self.rag_enabled = False
             logger.info("RAG enabled with Azure AI Search")
         except Exception as e:
             logger.warning(f"Failed to initialize Azure AI Search: {str(e)}")
