@@ -2,6 +2,7 @@ from functools import lru_cache
 from app.db.database import get_cosmos_database
 from app.services.stevens_service import StevensService
 from app.services.canvas_service import CanvasService
+from app.services.voice_service import AzureVoiceService  # ✅ Add this import
 from typing import AsyncGenerator
 
 
@@ -9,8 +10,9 @@ from typing import AsyncGenerator
 def get_services(cosmos_db):
     """Create singleton instances of services with injected dependencies"""
     return {
-        "stevens_service": StevensService(cosmos_db),  # Pass DB dependency
-        "canvas_service": CanvasService()
+        "stevens_service": StevensService(cosmos_db),  # Existing
+        "canvas_service": CanvasService(),             # Existing
+        "voice_service": AzureVoiceService(),          # ✅ New Voice Service
     }
 
 

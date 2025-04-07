@@ -5,6 +5,7 @@ from app.context import get_service_context
 from fastapi import Depends
 import time
 import pathlib
+from app.api import voice 
 
 logging.basicConfig(
     level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -44,6 +45,10 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+
+app.include_router(voice.router, prefix="/api/voice", tags=["Voice"])
+
 
 # cors
 app.add_middleware(
