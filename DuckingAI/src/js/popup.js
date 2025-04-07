@@ -8,6 +8,8 @@ document.addEventListener("DOMContentLoaded", function () {
   const stopButtonContainer = document.getElementById("stop-button-container");
   const stopButton = document.getElementById("stopButton");
 
+  let isSpeaking = false; // Track speaking state
+
   // 更新状态函数
   function updateStatus(message, isError = false) {
     statusDiv.textContent = message;
@@ -20,7 +22,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }, 3000);
   }
 
-  // 为触发自动化按钮添加点击事件
+  // 触发自动化按钮
   if (triggerButton) {
     triggerButton.addEventListener("click", function () {
       updateStatus("触发自动化操作...");
@@ -28,7 +30,7 @@ document.addEventListener("DOMContentLoaded", function () {
       chrome.runtime.sendMessage(
         { type: "TRIGGER_AUTOMATION" },
         function (response) {
-          if (response && response.status === "triggered") {
+          if (response?.status === "triggered") {
             updateStatus("已成功触发自动化操作");
           } else {
             updateStatus("触发自动化操作失败", true);
@@ -38,7 +40,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  // 为轮询开关添加变更事件
+  // 轮询开关
   if (pollingToggle) {
     chrome.storage.local.get(["pollingEnabled"], function (result) {
       if (result.hasOwnProperty("pollingEnabled")) {
@@ -50,9 +52,8 @@ document.addEventListener("DOMContentLoaded", function () {
       const enabled = this.checked;
 
       chrome.storage.local.set({ pollingEnabled: enabled });
-
       chrome.runtime.sendMessage(
-        { type: "TOGGLE_POLLING", enabled: enabled },
+        { type: "TOGGLE_POLLING", enabled },
         function (response) {
           if (response) {
             updateStatus(enabled ? "已开启自动轮询" : "已关闭自动轮询");
@@ -62,105 +63,99 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  // ✅ WebSocket connection for voice UI
+  // ✅ WebSocket connection
   const socket = new WebSocket("ws://localhost:8000/ws/voice");
 
-  socket.addEventListener("open", function () {
+  socket.addEventListener("open", () => {
     console.log("✅ WebSocket connected");
   });
 
-  socket.addEventListener("message", function (event) {
+  socket.addEventListener("message", (event) => {
     const data = JSON.parse(event.data);
     console.log("Message from server:", data);
 
     switch (data.event) {
       case "listening":
         showListeningAnimation();
+        isSpeaking = false;
         break;
       case "processing":
         showProcessingAnimation();
+        isSpeaking = false;
         break;
       case "speaking":
         showSpeakingAnimation();
+        isSpeaking = true;
         break;
       case "idle":
         resetAnimations();
+        isSpeaking = false;
         break;
       default:
         console.log("Unknown event:", data.event);
     }
   });
 
-  socket.addEventListener("error", function (error) {
+  socket.addEventListener("error", (error) => {
     console.error("❌ WebSocket error:", error);
   });
 
-  socket.addEventListener("close", function () {
+  socket.addEventListener("close", () => {
     console.warn("❌ WebSocket disconnected");
   });
 
-  window.addEventListener("beforeunload", function () {
+  window.addEventListener("beforeunload", () => {
     if (socket.readyState === WebSocket.OPEN) {
       socket.close();
     }
   });
 
+  // UI state handlers
   function showListeningAnimation() {
-    if (voiceStatus) {
-      voiceStatus.textContent = "🎤 Listening...";
-      voiceStatus.className = "voice-status listening";
-    }
-    if (stopButtonContainer) {
-      stopButtonContainer.style.display = "none";
-    }
+    updateVoiceUI("🎤 Listening...", "listening", false);
   }
 
   function showProcessingAnimation() {
-    if (voiceStatus) {
-      voiceStatus.textContent = "⚙️ Processing...";
-      voiceStatus.className = "voice-status processing";
-    }
-    if (stopButtonContainer) {
-      stopButtonContainer.style.display = "none";
-    }
+    updateVoiceUI("⚙️ Processing...", "processing", false);
   }
 
   function showSpeakingAnimation() {
-    if (voiceStatus) {
-      voiceStatus.textContent = "🗣️ Speaking...";
-      voiceStatus.className = "voice-status speaking";
-    }
-    if (stopButtonContainer) {
-      stopButtonContainer.style.display = "block";
-    }
+    updateVoiceUI("🗣️ Speaking...", "speaking", true);
   }
 
   function resetAnimations() {
+    updateVoiceUI("", "", false);
+  }
+
+  function updateVoiceUI(text, className, showStopButton) {
     if (voiceStatus) {
-      voiceStatus.textContent = "";
-      voiceStatus.className = "voice-status";
+      voiceStatus.textContent = text;
+      voiceStatus.className = "voice-status " + className;
     }
     if (stopButtonContainer) {
-      stopButtonContainer.style.display = "none";
+      stopButtonContainer.style.display = showStopButton ? "block" : "none";
     }
   }
 
-  // ✅ Stop Button Click Event
+  // ✅ Stop Button handler
   if (stopButton) {
     stopButton.addEventListener("click", function () {
       console.log("🛑 Stop button clicked");
 
       // Stop any ongoing speech synthesis
-      if (window.speechSynthesis) {
+      if (window.speechSynthesis && window.speechSynthesis.speaking) {
         window.speechSynthesis.cancel();
+        console.log("🛑 Speech synthesis cancelled");
       }
 
-      // Optionally, send stop event to server if needed
+      // Send stop event to backend
       if (socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ event: "stop" }));
       }
 
       resetAnimations();
+      updateStatus("🛑 Assistant stopped");
+      isSpeaking = false;
     });
   }
 });

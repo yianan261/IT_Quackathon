@@ -130,6 +130,24 @@ class ChatBot {
         input.placeholder = "Ask me a question";
       };
 
+      let isRecognitionActive = false;
+
+      recognition.onstart = () => {
+        isRecognitionActive = true;
+      };
+
+      recognition.onend = () => {
+        isRecognitionActive = false;
+      };
+
+      micBtn.addEventListener("click", () => {
+        if (!isRecognitionActive) {
+          recognition.start();
+        } else {
+          console.log("Speech recognition already running.");
+        }
+      });
+
       micBtn.addEventListener("click", () => {
         recognition.start();
       });

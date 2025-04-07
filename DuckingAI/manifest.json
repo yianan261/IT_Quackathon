@@ -9,8 +9,7 @@
     "storage",
     "tabs",
     "webNavigation",
-    "contextMenus",
-    "microphone"
+    "contextMenus"
   ],
   "host_permissions": [
     "https://sit.instructure.com/*",
