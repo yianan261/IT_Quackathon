@@ -288,6 +288,9 @@ class WorkdayService:
         print("Advisor info:", advisors)
         self.advisors = advisors
 
+    def get_advisors_list(self):
+        return self.advisors
+
 
 # if __name__ == "__main__":
 #     import asyncio

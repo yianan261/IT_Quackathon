@@ -44,7 +44,6 @@ async def navigate_to_workday_registration(mock_mode: bool = False,
         print(
             f"***************Navigated to Workday registration page: {result}")
 
-        
         final_result = {
             "success":
             result["success"],
@@ -113,10 +112,40 @@ async def navigate_to_workday_financial_account(mock_mode: bool = False,
 
     except Exception as e:
         return json.dumps({
-            "success":
+            xw"success":
             False,
             "error":
             f"Error navigating to financial account: {str(e)}"
+        })
+
+
+async def get_advisors_info() -> str:
+    """
+    Retrieves advisor information scraped from Workday.
+    """
+    try:
+        service = await get_workday_service()
+        advisors = service.get_advisors_list()
+        return json.dumps({
+            "success":
+            True,
+            "advisors":
+            advisors,
+            "human_message":
+            ("📘 Here are your advisors:\n" +
+             "\n".join(f"- {a['role']}: {a['person']} ({a['email']})"
+                       for a in advisors) if advisors else
+             "⚠️ No advisor information available. Try visiting Workday first."
+             )
+        })
+    except Exception as e:
+        return json.dumps({
+            "success":
+            False,
+            "error":
+            str(e),
+            "human_message":
+            "⚠️ I couldn't retrieve your advisor info."
         })
 
 
@@ -170,6 +199,7 @@ def run_async_tool(tool_coro):
         })
 
 
+# sync wrapper for async functions
 def navigate_to_workday_registration_sync(mock_mode: bool = False) -> str:
     print("[DEBUG] Called sync wrapper for registration")
     return run_async_tool(navigate_to_workday_registration(mock_mode))
@@ -178,6 +208,10 @@ def navigate_to_workday_registration_sync(mock_mode: bool = False) -> str:
 def navigate_to_workday_financial_account_sync(mock_mode: bool = False) -> str:
     print("[DEBUG] Called sync wrapper for financial")
     return run_async_tool(navigate_to_workday_financial_account(mock_mode))
+
+
+def get_advisors_info_sync() -> str:
+    return run_async_tool(get_advisors_info())
 
 
 def get_course_assignments(course_identifier: str) -> str:
@@ -283,14 +317,13 @@ user_functions: Set[Callable[..., Any]] = {
     get_course_assignments,
     get_current_courses,
     get_upcoming_courses_assignments,
-    get_academic_calendar_event,
     get_program_requirements,
     get_announcements_for_all_courses,
     get_announcements_for_specific_courses,
     navigate_to_workday_registration_sync,
     navigate_to_workday_financial_account_sync,
-    # navigate_to_workday_registration,
-    # navigate_to_workday_financial_account
+    get_advisors_info_sync,
+
 }
 # Define all the available user functions with their schemas
 user_functions_schema = [{
@@ -365,5 +398,13 @@ user_functions_schema = [{
                 "Stay open the browser after navigating to the financial account page, set to true"
             }
         }
+    }
+},
+{
+    "name": "get_advisors_info_sync",
+    "description": "Gets advisor contact information scraped from Workday",
+    "parameters": {
+        "type": "object",
+        "properties": {}
     }
 }]
