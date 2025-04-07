@@ -7,30 +7,48 @@ class AzureVoiceService:
         self.speech_key = "YOUR_SPEECH_KEY"
         self.service_region = "YOUR_SERVICE_REGION"
 
-    async def speech_to_text(self, audio_file: UploadFile):
-        speech_config = speechsdk.SpeechConfig(subscription=self.speech_key, region=self.service_region)
-        audio_input = speechsdk.AudioConfig(filename=audio_file.file)
+async def stream_speech_to_text(self, callback):
+    speech_config = speechsdk.SpeechConfig(subscription=self.speech_key, region=self.service_region)
+    audio_config = speechsdk.audio.AudioConfig(use_default_microphone=True)
+    speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
 
-        speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_input)
+    def handle_recognized(evt):
+        if evt.result.reason == speechsdk.ResultReason.RecognizedSpeech:
+            print(f"Recognized: {evt.result.text}")
+            callback(evt.result.text)
 
-        result = speech_recognizer.recognize_once()
+    speech_recognizer.recognized.connect(handle_recognized)
 
-        if result.reason == speechsdk.ResultReason.RecognizedSpeech:
-            return result.text
-        else:
-            return f"Speech recognition failed: {result.reason}"
+    speech_recognizer.start_continuous_recognition()
 
-    async def text_to_speech(self, text: str):
-        speech_config = speechsdk.SpeechConfig(subscription=self.speech_key, region=self.service_region)
-        audio_config = speechsdk.audio.AudioOutputConfig(use_default_speaker=False)
 
-        synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=None)
+async def stream_text_to_speech(self, text: str, stream_callback):
+    speech_config = speechsdk.SpeechConfig(subscription=self.speech_key, region=self.service_region)
+    speech_config.speech_synthesis_voice_name = "en-US-JennyMultilingualNeural"
+    speech_config.set_speech_synthesis_output_format(
+        speechsdk.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3
+    )
 
-        result = synthesizer.speak_text_async(text).get()
+    stream = speechsdk.audio.PullAudioOutputStream()
+    audio_config = speechsdk.audio.AudioOutputConfig(stream=stream)
+    synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
 
-        if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
-            audio_stream = io.BytesIO(result.audio_data)
-            audio_stream.seek(0)
-            return audio_stream
-        else:
-            raise Exception(f"Text to speech synthesis failed: {result.reason}")
+    ssml = f"""
+    <speak version='1.0' xml:lang='en-US'>
+        <voice name='en-US-JennyMultilingualNeural'>
+            <prosody rate='medium' pitch='+0st'>
+                <mstts:express-as style="chat" styledegree="2.5">
+                    {text}
+                </mstts:express-as>
+            </prosody>
+        </voice>
+    </speak>
+    """
+
+    result = synthesizer.speak_ssml_async(ssml).get()
+
+    buffer = bytearray(4096)
+    size = stream.read(buffer)
+    while size > 0:
+        stream_callback(buffer[:size])
+        size = stream.read(buffer)

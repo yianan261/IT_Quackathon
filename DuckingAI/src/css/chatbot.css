@@ -217,3 +217,51 @@
   height: 20px;
   filter: brightness(0) invert(1);
 } 
+
+/* ✅ Voice status base style */
+.voice-status {
+  text-align: center;
+  margin-top: 15px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: #333;
+  font-weight: bold;
+  transition: all 0.3s ease;
+}
+
+/* ✅ Listening animation */
+.voice-status.listening {
+  color: #1e90ff; /* DodgerBlue */
+  animation: pulse-listening 1.2s infinite;
+}
+
+/* ✅ Processing animation */
+.voice-status.processing {
+  color: #ffa500; /* Orange */
+  animation: pulse-processing 1.2s infinite;
+}
+
+/* ✅ Speaking animation */
+.voice-status.speaking {
+  color: #28a745; /* Green */
+  animation: pulse-speaking 1.2s infinite;
+}
+
+/* ✅ Pulse animations */
+@keyframes pulse-listening {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.1); opacity: 0.7; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes pulse-processing {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.1); opacity: 0.5; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes pulse-speaking {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.15); opacity: 0.6; }
+  100% { transform: scale(1); opacity: 1; }
+}

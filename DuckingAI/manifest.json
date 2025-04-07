@@ -9,7 +9,8 @@
     "storage",
     "tabs",
     "webNavigation",
-    "contextMenus"
+    "contextMenus",
+    "microphone"
   ],
   "host_permissions": [
     "https://sit.instructure.com/*",
@@ -45,11 +46,14 @@
       "description": "Trigger automation workflow"
     }
   },
-  "web_accessible_resources": [{
-    "resources": [
-      "src/assets/*",
-      "src/components/*"
-    ],
-    "matches": ["<all_urls>"]
-  }]
-} 
+"web_accessible_resources": [{
+  "resources": [
+    "src/assets/*",
+    "src/components/*",
+    "src/audio/*",
+    "src/css/chatbot.css"
+  ],
+  "matches": ["<all_urls>"]
+}]
+
+}

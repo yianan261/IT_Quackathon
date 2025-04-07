@@ -5,7 +5,9 @@ from app.context import get_service_context
 from fastapi import Depends
 import time
 import pathlib
-from app.api import voice 
+from app.api import voice
+from fastapi import WebSocket
+
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -357,6 +359,15 @@ async def test_automation():
         "message": "Multi-step automation instruction ready",
         "instruction": automation_instruction
     }
+
+@app.websocket("/ws/voice")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    # Example events: you can wire this properly later
+    await websocket.send_json({"event": "listening"})
+    await websocket.send_json({"event": "processing"})
+    await websocket.send_json({"event": "speaking"})
+    await websocket.send_json({"event": "idle"})
 
 
 if __name__ == "__main__":
