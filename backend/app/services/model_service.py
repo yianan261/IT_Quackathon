@@ -143,6 +143,15 @@ class ModelService:
                     f"\n\n{context}\n\n"
                     "Provide a clear and concise answer. Use emojis to make it engaging. "
                     "Include a short encouraging message for the student."
+                    "when user ask about compare two courses, you should check the index content, get the basic course information, and then enchance the details from the information on the internet."
+                    "then answer the question like this format: " 
+
+                    "Dimension  CS 549 (Distributed Systems and Cloud Computing)    CS 548 (Enterprise Software Architecture and Design)"
+"Core Content   Underlying technology principles, consensus algorithms, and the underlying implementation of cloud computing    Enterprise software architecture patterns, business modeling, and application layer architectural practices"
+"Theory vs. Practice    Emphasizes theory and low-level implementation  Emphasizes engineering practice and design"
+"Data Model Focuses on distributed storage (e.g., Cassandra) and big data batch processing  More focused on data modeling methods, domain model design, and architecture"
+"Architectural Patterns Centers on distributed systems principles and problem-oriented approaches (e.g., CAP theorem)   Covers microservices, DDD, EDA, CQRS, and enterprise integration"
+"Tools & Technologies   Hadoop, Paxos, NoSQL (Cassandra)    Docker, Kubernetes, Kafka, Hyperledger Fabric"
                 }
                 self.project_client.agents.create_message(
                     thread_id=thread.id,

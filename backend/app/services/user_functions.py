@@ -2,15 +2,15 @@ from typing import Any, Set, Callable, Optional
 import json
 from app.services.canvas_service import CanvasService
 from app.services.stevens_service import StevensService
-from playwright.sync_api import sync_playwright
+# from playwright.sync_api import sync_playwright
 from app.services.workday_service import WorkdayService
 import os
 
 # Create singleton instances
 _canvas_service = CanvasService()
 _stevens_service = StevensService()
-with sync_playwright() as p:
-    _workday_service = WorkdayService(p)
+# with sync_playwright() as p:
+#     _workday_service = WorkdayService(p)
 
 
 def get_course_assignments(course_identifier: str) -> str:
@@ -178,6 +178,7 @@ def login_to_workday(username: Optional[str] = None,
 
 
 def navigate_to_workday_registration(mock_mode: bool = False) -> str:
+
     """
     Navigate to the course registration page in Workday.
     This will first ensure you are logged in, then navigate to the registration page.
@@ -271,7 +272,25 @@ def navigate_to_workday_registration(mock_mode: bool = False) -> str:
             f"Error navigating to course registration: {str(e)}"
         })
 
-
+def get_course_registration_advice(program: str = None, course_type: str = None) -> str:
+    """
+    Provides advice for students about course registration process.
+    
+    :param program: Student's program (e.g., 'AAI', 'CS', 'EE')
+    :param course_type: Type of course to register for (e.g., 'CS', 'core', 'elective')
+    :return: A JSON string with registration advice
+    """
+    # Default advice for all students
+    advice = {
+        "general_advice": "You should first consult your academic and faculty advisor to get approval.",
+        "next_steps": [
+            "Schedule a meeting with your academic advisor",
+            "Discuss your course plan and get approval",
+            "Follow the registration procedure in Workday"
+        ]
+    }
+    
+    return json.dumps(advice)
 # Register all functions
 user_functions: Set[Callable[..., Any]] = {
     get_course_assignments,
@@ -283,6 +302,7 @@ user_functions: Set[Callable[..., Any]] = {
     get_announcements_for_specific_courses,
     login_to_workday,
     navigate_to_workday_registration,
+    get_course_registration_advice,
 }
 
 # Define all the available user functions with their schemas
