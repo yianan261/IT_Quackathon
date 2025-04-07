@@ -9,8 +9,88 @@ import os
 # Create singleton instances
 _canvas_service = CanvasService()
 _stevens_service = StevensService()
-with sync_playwright() as p:
-    _workday_service = WorkdayService(p)
+
+# _playwright = None
+# _workday_service = None
+
+# def get_workday_service() -> WorkdayService:
+#     global _playwright, _workday_service
+#     if _playwright is None:
+#         _playwright = sync_playwright().start()
+#     if _workday_service is None:
+#         _workday_service = WorkdayService(_playwright)
+#     return _workday_service
+
+playwright = sync_playwright().start()
+_workday_service = WorkdayService(playwright)
+
+
+def navigate_to_workday_registration(mock_mode: bool = False) -> str:
+    """
+    Navigate to the course registration page in Workday.
+    This will open a browser and prompt you to enter your credentials if not already logged in.
+
+    Args:
+        mock_mode: Use mock mode for testing without Playwright installed
+
+    Returns:
+        JSON string with navigation results
+    """
+    try:
+        result = _workday_service.navigate_to_workday_registration()
+
+        human_message = (
+            "I've redirected you to the Workday course registration page. "
+            "Here's more information on how you can register for courses: "
+            "https://support.stevens.edu/support/solutions/articles/19000082229"
+        ) if result.get("success") else None
+
+        return json.dumps({
+            "success": result["success"],
+            "message": result["message"],
+            "screenshot": result["screenshot"],
+            "human_message": human_message
+        })
+    except Exception as e:
+        return json.dumps({
+            "success":
+            False,
+            "error":
+            f"Error navigating to registration: {str(e)}"
+        })
+
+
+def navigate_to_workday_financial_account(mock_mode: bool = False) -> str:
+    """
+    Navigate to the financial account page in Workday.
+    This will open a browser and prompt you to enter your credentials if not already logged in.
+
+    Args:
+        mock_mode: Use mock mode for testing without Playwright installed
+
+    Returns:
+        JSON string with navigation results
+    """
+    try:
+        result = _workday_service.navigate_to_workday_financial_account()
+        human_message = (
+            "I've redirected you to the Workday financial account page. "
+        ) if result.get("success") else None
+
+        return json.dumps({
+            "success": result["success"],
+            "message": result["message"],
+            "screenshot": result["screenshot"],
+            "human_message": human_message
+        })
+
+    except Exception as e:
+        return json.dumps({
+            "success":
+            False,
+            "error":
+            f"Error navigating to financial account: {str(e)}"
+        })
 
 
 def get_course_assignments(course_identifier: str) -> str:
@@ -274,15 +354,11 @@ def navigate_to_workday_registration(mock_mode: bool = False) -> str:
 
 # Register all functions
 user_functions: Set[Callable[..., Any]] = {
-    get_course_assignments,
-    get_current_courses,
-    get_upcoming_courses_assignments,
-    get_academic_calendar_event,
-    get_program_requirements,
-    get_announcements_for_all_courses,
-    get_announcements_for_specific_courses,
-    login_to_workday,
-    navigate_to_workday_registration,
+    get_course_assignments, get_current_courses,
+    get_upcoming_courses_assignments, get_academic_calendar_event,
+    get_program_requirements, get_announcements_for_all_courses,
+    get_announcements_for_specific_courses, login_to_workday,
+    navigate_to_workday_registration, navigate_to_workday_financial_account
 }
 
 # Define all the available user functions with their schemas
@@ -350,6 +426,19 @@ user_functions_schema = [{
     "name": "navigate_to_workday_registration",
     "description":
     "Navigate to the course registration page in Workday. This will open a browser and prompt you to enter your credentials if not already logged in.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "mock_mode": {
+                "type": "boolean",
+                "description": "Use mock mode for testing without Playwright"
+            }
+        }
+    }
+}, {
+    "name": "navigate_to_workday_financial_account",
+    "description":
+    "Navigate to the financial account page in Workday. This will open a browser and prompt you to enter your credentials if not already logged in.",
     "parameters": {
         "type": "object",
         "properties": {

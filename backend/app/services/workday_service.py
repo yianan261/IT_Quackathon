@@ -89,7 +89,6 @@ class WorkdayService:
 
                 self.page.wait_for_selector("text=Academics", timeout=3000)
                 self.page.click("text=Academics")
-                academics_html = self.page.content()
                 if not self.advisors:
                     self.get_advisors()
                 self.page.wait_for_selector("text=Find Course Sections",
@@ -162,7 +161,8 @@ class WorkdayService:
 
                 return {
                     "success": True,
-                    "html": academics_html,
+                    "message":
+                    "Navigated to Workday Course Registration successfully.",
                     "screenshot": course_reg_screenshot_path
                 }
             else:
@@ -252,17 +252,3 @@ class WorkdayService:
 
     def close(self):
         self.browser.close()
-
-
-if __name__ == "__main__":
-    with sync_playwright() as p:
-        service = WorkdayService(p)
-        # service.navigate_to_workday_registration()
-        service.navigate_to_workday_financial_account()
-    # service.navigate_to_workday_registration()
-    # with sync_playwright() as p:
-    #     service = WorkdayService(p)
-    #     try:
-    #         service.navigate_to_workday_financial_account()
-    #     finally:
-    #         service.close()
