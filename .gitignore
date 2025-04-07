@@ -19,5 +19,6 @@ dump.rdb
 __pycache__/
 *.pyc
 
-/chrome_profile/
 chrome_profile/
+# Ignore Chrome profile cache and session data
+backend/app/services/chrome_profile/
