@@ -19,5 +19,5 @@ dump.rdb
 __pycache__/
 *.pyc
 
-/chrome-profile/
-chrome-profile/
+/chrome_profile/
+chrome_profile/
