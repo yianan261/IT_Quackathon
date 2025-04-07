@@ -18,3 +18,6 @@ env/
 dump.rdb
 __pycache__/
 *.pyc
+
+/chrome-profile/
+chrome-profile/
