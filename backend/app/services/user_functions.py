@@ -76,7 +76,8 @@ async def navigate_to_workday_registration(mock_mode: bool = False) -> str:
             "Here's more information on how you can register for courses: "
             "https://support.stevens.edu/support/solutions/articles/19000082229"
         ) if result.get("success") else None
-
+        print(
+            f"***************Navigated to Workday registration page: {result}")
         return json.dumps({
             "success": result["success"],
             "message": result["message"],
@@ -256,10 +257,10 @@ user_functions: Set[Callable[..., Any]] = {
     get_program_requirements,
     get_announcements_for_all_courses,
     get_announcements_for_specific_courses,
-    # navigate_to_workday_registration_sync,
-    # navigate_to_workday_financial_account_sync,
-    navigate_to_workday_registration,
-    navigate_to_workday_financial_account
+    navigate_to_workday_registration_sync,
+    navigate_to_workday_financial_account_sync,
+    # navigate_to_workday_registration,
+    # navigate_to_workday_financial_account
 }
 
 # Define all the available user functions with their schemas
@@ -299,7 +300,7 @@ user_functions_schema = [{
         "required": ["course_identifier"]
     }
 }, {
-    "name": "navigate_to_workday_registration",
+    "name": "navigate_to_workday_registration_sync",
     "description":
     "Navigate to the course registration page in Workday. This will open a browser and prompt you to enter your credentials if not already logged in.",
     "parameters": {
@@ -312,7 +313,7 @@ user_functions_schema = [{
         }
     }
 }, {
-    "name": "navigate_to_workday_financial_account",
+    "name": "navigate_to_workday_financial_account_sync",
     "description":
     "Navigate to the financial account page in Workday. This will open a browser and prompt you to enter your credentials if not already logged in.",
     "parameters": {

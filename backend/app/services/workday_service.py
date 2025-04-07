@@ -55,6 +55,7 @@ class WorkdayService:
 
     async def navigate_to_workday_registration(self):
         try:
+            print("======Navigating to Workday registration page")
             await self.page.goto("https://www.stevens.edu/it/services/workday")
             await self.page.click("text=Log in to Workday")
             await self.page.wait_for_timeout(2000)
