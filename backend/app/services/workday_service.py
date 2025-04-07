@@ -31,6 +31,7 @@ class WorkdayService:
         self.graduate_level = graduate_level or "Graduate"
         self.username = os.getenv("WORKDAY_USERNAME")
         self.password = os.getenv("WORKDAY_PASSWORD")
+        self.logged_in = False
         self.advisors = []
 
     def scroll_until_visible(self,
@@ -54,6 +55,24 @@ class WorkdayService:
         raise Exception(
             f"Could not find label '{label}' after {max_scrolls} scrolls")
 
+    def login(self):
+        html_content = self.page.content()
+
+        if "Stevens Institute of Technology - Sign In" in html_content:
+            print("Login page detected")
+            self.page.locator("input[name='credentials.passcode']").fill(
+                self.password)
+            self.page.get_by_role("button", name="Sign in").click()
+
+            self.page.wait_for_url("**/home.htmld", timeout=60_000)
+
+        landing_page_html = self.page.content()
+        if "https://wd5.myworkday.com/stevens/d/home.htmld" in landing_page_html or "window.workday" in landing_page_html:
+            self.logged_in = True
+            return True
+        else:
+            return False
+
     def navigate_to_workday_registration(self):
         try:
             self.page.goto("https://www.stevens.edu/it/services/workday")
@@ -61,19 +80,8 @@ class WorkdayService:
             self.page.wait_for_timeout(2000)
 
             time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            html_content = self.page.content()
 
-            if "Stevens Institute of Technology - Sign In" in html_content:
-                print("Login page detected")
-                self.page.locator("input[name='credentials.passcode']").fill(
-                    self.password)
-                self.page.get_by_role("button", name="Sign in").click()
-
-                self.page.wait_for_url("**/home.htmld", timeout=60_000)
-
-            landing_page_html = self.page.content()
-            if "https://wd5.myworkday.com/stevens/d/home.htmld" in landing_page_html or "window.workday" in landing_page_html:
-                self.logged_in = True
+            if self.login():
                 logger.info("Already logged in or login successful")
                 self.page.wait_for_timeout(3000)
 
@@ -81,7 +89,9 @@ class WorkdayService:
 
                 self.page.wait_for_selector("text=Academics", timeout=3000)
                 self.page.click("text=Academics")
-                self.get_advisors()
+                academics_html = self.page.content()
+                if not self.advisors:
+                    self.get_advisors()
                 self.page.wait_for_selector("text=Find Course Sections",
                                             timeout=3000)
                 self.page.click("text=Find Course Sections")
@@ -152,7 +162,7 @@ class WorkdayService:
 
                 return {
                     "success": True,
-                    "html": landing_page_html,
+                    "html": academics_html,
                     "screenshot": course_reg_screenshot_path
                 }
             else:
@@ -161,7 +171,7 @@ class WorkdayService:
                     "success": False,
                     "error":
                     "Login failed - could not reach Workday registration page",
-                    "html": landing_page_html
+                    "html": None
                 }
 
         except Exception as e:
@@ -169,8 +179,44 @@ class WorkdayService:
                 f"Error during navigation to Workday registration: {str(e)}")
             return {"success": False, "error": str(e), "html": None}
 
-    def go_to_registration(self):
-        pass
+    def navigate_to_workday_financial_account(self):
+        try:
+            self.page.goto("https://www.stevens.edu/it/services/workday")
+            self.page.click("text=Log in to Workday")
+            self.page.wait_for_timeout(2000)
+            if self.login():
+                logger.info("Already logged in or login successful")
+                self.page.wait_for_timeout(3000)
+                self.page.click("text=Finances")
+                self.page.wait_for_timeout(5000)
+                screenshot_path = os.path.join(
+                    self.screenshots_dir,
+                    f"workday_financial_account/financial_account_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png"
+                )
+
+                os.makedirs(os.path.dirname(screenshot_path), exist_ok=True)
+                self.page.screenshot(path=screenshot_path)
+
+                return {
+                    "success": True,
+                    "message":
+                    "Navigated to financial account section successfully.",
+                    "screenshot": screenshot_path
+                }
+            else:
+                logger.error("Login failed - Welcome page not detected")
+                return {
+                    "success": False,
+                    "error":
+                    "Login failed - could not reach Workday finance page",
+                    "html": None
+                }
+
+        except Exception as e:
+            logger.error(
+                f"Error during navigation to Workday financial account: {str(e)}"
+            )
+            return {"success": False, "error": str(e), "html": None}
 
     def get_advisors(self):
         # Wait for the specific section to be visible
@@ -204,8 +250,19 @@ class WorkdayService:
         print("Advisor info:", advisors)
         self.advisors = advisors
 
+    def close(self):
+        self.browser.close()
+
 
 if __name__ == "__main__":
     with sync_playwright() as p:
         service = WorkdayService(p)
-        service.navigate_to_workday_registration()
+        # service.navigate_to_workday_registration()
+        service.navigate_to_workday_financial_account()
+    # service.navigate_to_workday_registration()
+    # with sync_playwright() as p:
+    #     service = WorkdayService(p)
+    #     try:
+    #         service.navigate_to_workday_financial_account()
+    #     finally:
+    #         service.close()

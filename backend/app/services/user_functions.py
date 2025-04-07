@@ -2,13 +2,15 @@ from typing import Any, Set, Callable, Optional
 import json
 from app.services.canvas_service import CanvasService
 from app.services.stevens_service import StevensService
+from playwright.sync_api import sync_playwright
 from app.services.workday_service import WorkdayService
 import os
 
 # Create singleton instances
 _canvas_service = CanvasService()
 _stevens_service = StevensService()
-_workday_service = WorkdayService()
+with sync_playwright() as p:
+    _workday_service = WorkdayService(p)
 
 
 def get_course_assignments(course_identifier: str) -> str:
