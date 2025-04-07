@@ -213,15 +213,6 @@ class ModelService:
 
             function_call_info = None
 
-            # # Check if the agent's response includes a function call
-            # if latest_message.tool_calls:
-            #     tool_call = latest_message.tool_calls[
-            #         0]  # Just handling the first tool call for now
-            #     function_call_info = {
-            #         "name": tool_call.function.name,
-            #         "arguments": tool_call.function.arguments
-            #     }
-
             return {"content": content, "function_call": function_call_info}
 
         except Exception as e:
