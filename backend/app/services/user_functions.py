@@ -2,48 +2,15 @@ from typing import Any, Set, Callable, Optional
 import json
 from app.services.canvas_service import CanvasService
 from app.services.stevens_service import StevensService
-# from playwright.sync_api import sync_playwright
 from playwright.async_api import async_playwright
 from app.services.workday_service import WorkdayService
 import asyncio
-# from app.services.workday_service2 import WorkdayService
 import os
+from threading import Thread
 
 # Create singleton instances
 _canvas_service = CanvasService()
 _stevens_service = StevensService()
-
-# with sync_playwright() as playwright:
-#     _workday_service = WorkdayService(
-#         playwright,
-#         current_academic_year="2025-2026 Semester Academic Calendar",
-#         current_academic_semester="2025 Fall Semester(09/02/2025-12/22/2025)",
-#         graduate_level="Graduate")
-
-# def navigate_to_workday_registration_sync(mock_mode: bool = False) -> str:
-#     try:
-#         result = _workday_service.navigate_to_workday_registration(
-#             mock_mode=mock_mode)
-
-#         human_message = (
-#             "I've redirected you to the Workday course registration page. "
-#             "Here's more information on how you can register for courses: "
-#             "https://support.stevens.edu/support/solutions/articles/19000082229"
-#         ) if result.get("success") else None
-
-#         return json.dumps({
-#             "success": result["success"],
-#             "message": result["message"],
-#             "screenshot": result["screenshot"],
-#             "human_message": human_message
-#         })
-#     except Exception as e:
-#         return json.dumps({
-#             "success":
-#             False,
-#             "error":
-#             f"Error navigating to registration: {str(e)}"
-#         })
 
 _workday_service: Optional[WorkdayService] = None
 
@@ -51,12 +18,15 @@ _workday_service: Optional[WorkdayService] = None
 async def get_workday_service() -> WorkdayService:
     global _workday_service
     if _workday_service is None:
-        _workday_service = WorkdayService()
+        playwright = await async_playwright().start()
+        _workday_service = WorkdayService(playwright)
+
         await _workday_service.start()
     return _workday_service
 
 
-async def navigate_to_workday_registration(mock_mode: bool = False) -> str:
+async def navigate_to_workday_registration(mock_mode: bool = False,
+                                           stay_open: bool = False) -> str:
     """
     Navigate to the course registration page in Workday.
     This will open a browser and prompt you to enter your credentials if not already logged in.
@@ -69,32 +39,47 @@ async def navigate_to_workday_registration(mock_mode: bool = False) -> str:
     """
     try:
         service = await get_workday_service()
-        result = await service.navigate_to_workday_registration()
+        result = await service.navigate_to_workday_registration(stay_open)
 
-        human_message = (
-            "I've redirected you to the Workday course registration page. "
-            "Here's more information on how you can register for courses: "
-            "https://support.stevens.edu/support/solutions/articles/19000082229"
-        ) if result.get("success") else None
         print(
             f"***************Navigated to Workday registration page: {result}")
-        return json.dumps({
-            "success": result["success"],
-            "message": result["message"],
-            "screenshot": result["screenshot"],
-            "human_message": human_message
-        })
+
+        final_result = {
+            "success":
+            result["success"],
+            "message":
+            result["message"],
+            "screenshot":
+            result.get("screenshot"),
+            "human_message":
+            ("✅ I've redirected you to the Workday course registration page.\n\n"
+             "ℹ️ Here's more information on how you can register for courses: "
+             "https://support.stevens.edu/support/solutions/articles/19000082229"
+             ) if result["success"] else
+            "❌ I couldn't navigate to the registration page."
+        }
+        if not stay_open:
+            await service.close()
+
+        print("[DEBUG] Tool result returned to agent:",
+              json.dumps(final_result))
+
+        return json.dumps(final_result)
+
     except Exception as e:
         return json.dumps({
             "success":
             False,
             "error":
-            f"Error navigating to registration: {str(e)}"
+            f"Error navigating to registration: {str(e)}",
+            "human_message":
+            "❌ I couldn't navigate to the registration page. Try logging in manually at https://stevens.okta.com/"
         })
 
 
-async def navigate_to_workday_financial_account(
-        mock_mode: bool = False) -> str:
+async def navigate_to_workday_financial_account(mock_mode: bool = False,
+                                                stay_open: bool = False
+                                                ) -> str:
     """
     Navigate to the financial account page in Workday.
     This will open a browser and prompt you to enter your credentials if not already logged in.
@@ -107,39 +92,114 @@ async def navigate_to_workday_financial_account(
     """
     try:
         service = await get_workday_service()
-        result = await service.navigate_to_workday_financial_account()
-        human_message = (
-            "I've redirected you to the Workday financial account page. "
-        ) if result.get("success") else None
+        result = await service.navigate_to_workday_financial_account(stay_open)
+
+        if not stay_open:
+            await service.close()
 
         return json.dumps({
-            "success": result["success"],
-            "message": result["message"],
-            "screenshot": result["screenshot"],
-            "human_message": human_message
+            "success":
+            result["success"],
+            "message":
+            result["message"],
+            "screenshot":
+            result.get("screenshot"),
+            "human_message":
+            ("✅ I've redirected you to the Workday financial account page.\n\n"
+             ) if result["success"] else
+            "❌ I couldn't navigate to the financial account page."
         })
 
     except Exception as e:
         return json.dumps({
-            "success":
+            xw"success":
             False,
             "error":
             f"Error navigating to financial account: {str(e)}"
         })
 
 
-def run_async_tool(tool_coro):
+async def get_advisors_info() -> str:
+    """
+    Retrieves advisor information scraped from Workday.
+    """
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            return asyncio.run_coroutine_threadsafe(tool_coro, loop).result()
-        else:
-            return loop.run_until_complete(tool_coro)
-    except RuntimeError:
-        # In case no loop is set
-        return asyncio.run(tool_coro)
+        service = await get_workday_service()
+        advisors = service.get_advisors_list()
+        return json.dumps({
+            "success":
+            True,
+            "advisors":
+            advisors,
+            "human_message":
+            ("📘 Here are your advisors:\n" +
+             "\n".join(f"- {a['role']}: {a['person']} ({a['email']})"
+                       for a in advisors) if advisors else
+             "⚠️ No advisor information available. Try visiting Workday first."
+             )
+        })
+    except Exception as e:
+        return json.dumps({
+            "success":
+            False,
+            "error":
+            str(e),
+            "human_message":
+            "⚠️ I couldn't retrieve your advisor info."
+        })
 
 
+async def shutdown_workday_browser() -> str:
+    try:
+        if _workday_service:
+            await _workday_service.close()
+            return json.dumps({
+                "success": True,
+                "message": "Browser closed successfully."
+            })
+        return json.dumps({
+            "success": False,
+            "message": "WorkdayService is not active."
+        })
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def shutdown_workday_browser_sync() -> str:
+    return run_async_tool(shutdown_workday_browser())
+
+
+_background_loop = asyncio.new_event_loop()
+
+
+def _start_background_loop(loop):
+    asyncio.set_event_loop(loop)
+    loop.run_forever()
+
+
+# Start the background thread
+t = Thread(target=_start_background_loop,
+           args=(_background_loop, ),
+           daemon=True)
+t.start()
+
+
+def run_async_tool(tool_coro):
+    print("[DEBUG] run_async_tool: scheduling on background loop")
+    try:
+        future = asyncio.run_coroutine_threadsafe(tool_coro, _background_loop)
+        result = future.result()  # This blocks but safely waits for the result
+        print("[DEBUG] run_async_tool: coroutine finished")
+        return result
+    except Exception as e:
+        print(f"[ERROR] Exception in run_async_tool: {e}")
+        return json.dumps({
+            "success": False,
+            "error": f"Exception during async tool run: {str(e)}"
+        })
+
+
+# sync wrapper for async functions
 def navigate_to_workday_registration_sync(mock_mode: bool = False) -> str:
     print("[DEBUG] Called sync wrapper for registration")
     return run_async_tool(navigate_to_workday_registration(mock_mode))
@@ -148,6 +208,10 @@ def navigate_to_workday_registration_sync(mock_mode: bool = False) -> str:
 def navigate_to_workday_financial_account_sync(mock_mode: bool = False) -> str:
     print("[DEBUG] Called sync wrapper for financial")
     return run_async_tool(navigate_to_workday_financial_account(mock_mode))
+
+
+def get_advisors_info_sync() -> str:
+    return run_async_tool(get_advisors_info())
 
 
 def get_course_assignments(course_identifier: str) -> str:
@@ -253,16 +317,14 @@ user_functions: Set[Callable[..., Any]] = {
     get_course_assignments,
     get_current_courses,
     get_upcoming_courses_assignments,
-    get_academic_calendar_event,
     get_program_requirements,
     get_announcements_for_all_courses,
     get_announcements_for_specific_courses,
     navigate_to_workday_registration_sync,
     navigate_to_workday_financial_account_sync,
-    # navigate_to_workday_registration,
-    # navigate_to_workday_financial_account
-}
+    get_advisors_info_sync,
 
+}
 # Define all the available user functions with their schemas
 user_functions_schema = [{
     "name": "get_user_context",
@@ -309,6 +371,12 @@ user_functions_schema = [{
             "mock_mode": {
                 "type": "boolean",
                 "description": "Use mock mode for testing without Playwright"
+            },
+            "stay_open": {
+                "type":
+                "boolean",
+                "description":
+                "Stay open the browser after navigating to the registration page, set to true"
             }
         }
     }
@@ -322,7 +390,21 @@ user_functions_schema = [{
             "mock_mode": {
                 "type": "boolean",
                 "description": "Use mock mode for testing without Playwright"
+            },
+            "stay_open": {
+                "type":
+                "boolean",
+                "description":
+                "Stay open the browser after navigating to the financial account page, set to true"
             }
         }
+    }
+},
+{
+    "name": "get_advisors_info_sync",
+    "description": "Gets advisor contact information scraped from Workday",
+    "parameters": {
+        "type": "object",
+        "properties": {}
     }
 }]
