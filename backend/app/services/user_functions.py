@@ -11,8 +11,8 @@ from threading import Thread
 # Create singleton instances
 _canvas_service = CanvasService()
 _stevens_service = StevensService()
-with sync_playwright() as p:
-    _workday_service = WorkdayService(p)
+# with sync_playwright() as p:
+#     _workday_service = WorkdayService(p)
 
 
 def get_course_assignments(course_identifier: str) -> str:
@@ -303,112 +303,112 @@ user_functions: Set[Callable[..., Any]] = {
     get_program_requirements,
     get_announcements_for_all_courses,
     get_announcements_for_specific_courses,
-    login_to_workday,
-    navigate_to_workday_registration,
+    # login_to_workday,
+    # navigate_to_workday_registration,
     get_grades,
     get_grades_for_course,
 }
 
 # Define all the available user functions with their schemas
-user_functions_schema = [{
-    "name": "get_user_context",
-    "description":
-    "Retrieves context data for the user from multiple sources in a single call. The user profile comes from the User Service, while courses, assignments, and announcements come from Canvas API, and professors data comes from Stevens API. Use this to request several types of data at once. For example, to get profile and assignments information, call get_user_context(context_types=['profile', 'assignments']).",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "context_types": {
-                "type": "array",
-                "description": "List of context types to retrieve",
-                "items": {
-                    "type":
-                    "string",
-                    "enum": [
-                        "profile", "courses", "assignments", "announcements",
-                        "professors"
-                    ]
-                }
-            }
-        },
-        "required": ["context_types"]
-    }
-}, {
-    "name": "get_course_assignments",
-    "description": "Get assignments for a specific course",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "course_identifier": {
-                "type": "string",
-                "description": "Course name, code, or ID"
-            }
-        },
-        "required": ["course_identifier"]
-    }
-}, {
-    "name": "navigate_to_workday_registration_sync",
-    "description":
-    "Navigate to the course registration page in Workday. This will open a browser and prompt you to enter your credentials if not already logged in.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "mock_mode": {
-                "type": "boolean",
-                "description": "Use mock mode for testing without Playwright"
-            },
-            "stay_open": {
-                "type":
-                "boolean",
-                "description":
-                "Stay open the browser after navigating to the registration page, set to true"
-            }
-        }
-    }
-}, {
-    "name": "navigate_to_workday_financial_account_sync",
-    "description":
-    "Navigate to the financial account page in Workday. This will open a browser and prompt you to enter your credentials if not already logged in.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "mock_mode": {
-                "type": "boolean",
-                "description": "Use mock mode for testing without Playwright"
-            },
-            "stay_open": {
-                "type":
-                "boolean",
-                "description":
-                "Stay open the browser after navigating to the financial account page, set to true"
-            }
-        }
-    }
-},
-{
-    "name": "get_advisors_info_sync",
-    "description": "Gets advisor contact information scraped from Workday",
-    "parameters": {
-        "type": "object",
-        "properties": {}
-    }
-}, {
-    "name": "get_grades",
-    "description": "Get grades for all courses the student is enrolled in, in a simplified format with only essential information",
-    "parameters": {
-        "type": "object",
-        "properties": {}
-    }
-}, {
-    "name": "get_grades_for_course",
-    "description": "Get grades for a specific course in a simplified format with only essential information",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "course_identifier": {
-                "type": "string",
-                "description": "Course name, code, or ID (e.g., 'CS115', 'Machine Learning')"
-            }
-        },
-        "required": ["course_identifier"]
-    }
-}]
+# user_functions_schema = [{
+#     "name": "get_user_context",
+#     "description":
+#     "Retrieves context data for the user from multiple sources in a single call. The user profile comes from the User Service, while courses, assignments, and announcements come from Canvas API, and professors data comes from Stevens API. Use this to request several types of data at once. For example, to get profile and assignments information, call get_user_context(context_types=['profile', 'assignments']).",
+#     "parameters": {
+#         "type": "object",
+#         "properties": {
+#             "context_types": {
+#                 "type": "array",
+#                 "description": "List of context types to retrieve",
+#                 "items": {
+#                     "type":
+#                     "string",
+#                     "enum": [
+#                         "profile", "courses", "assignments", "announcements",
+#                         "professors"
+#                     ]
+#                 }
+#             }
+#         },
+#         "required": ["context_types"]
+#     }
+# }, {
+#     "name": "get_course_assignments",
+#     "description": "Get assignments for a specific course",
+#     "parameters": {
+#         "type": "object",
+#         "properties": {
+#             "course_identifier": {
+#                 "type": "string",
+#                 "description": "Course name, code, or ID"
+#             }
+#         },
+#         "required": ["course_identifier"]
+#     }
+# }, {
+#     "name": "navigate_to_workday_registration_sync",
+#     "description":
+#     "Navigate to the course registration page in Workday. This will open a browser and prompt you to enter your credentials if not already logged in.",
+#     "parameters": {
+#         "type": "object",
+#         "properties": {
+#             "mock_mode": {
+#                 "type": "boolean",
+#                 "description": "Use mock mode for testing without Playwright"
+#             },
+#             "stay_open": {
+#                 "type":
+#                 "boolean",
+#                 "description":
+#                 "Stay open the browser after navigating to the registration page, set to true"
+#             }
+#         }
+#     }
+# }, {
+#     "name": "navigate_to_workday_financial_account_sync",
+#     "description":
+#     "Navigate to the financial account page in Workday. This will open a browser and prompt you to enter your credentials if not already logged in.",
+#     "parameters": {
+#         "type": "object",
+#         "properties": {
+#             "mock_mode": {
+#                 "type": "boolean",
+#                 "description": "Use mock mode for testing without Playwright"
+#             },
+#             "stay_open": {
+#                 "type":
+#                 "boolean",
+#                 "description":
+#                 "Stay open the browser after navigating to the financial account page, set to true"
+#             }
+#         }
+#     }
+# },
+# {
+#     "name": "get_advisors_info_sync",
+#     "description": "Gets advisor contact information scraped from Workday",
+#     "parameters": {
+#         "type": "object",
+#         "properties": {}
+#     }
+# }, {
+#     "name": "get_grades",
+#     "description": "Get grades for all courses the student is enrolled in, in a simplified format with only essential information",
+#     "parameters": {
+#         "type": "object",
+#         "properties": {}
+#     }
+# }, {
+#     "name": "get_grades_for_course",
+#     "description": "Get grades for a specific course in a simplified format with only essential information",
+#     "parameters": {
+#         "type": "object",
+#         "properties": {
+#             "course_identifier": {
+#                 "type": "string",
+#                 "description": "Course name, code, or ID (e.g., 'CS115', 'Machine Learning')"
+#             }
+#         },
+#         "required": ["course_identifier"]
+#     }
+# }]
