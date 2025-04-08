@@ -112,7 +112,7 @@ async def navigate_to_workday_financial_account(mock_mode: bool = False,
 
     except Exception as e:
         return json.dumps({
-            xw"success":
+            "success":
             False,
             "error":
             f"Error navigating to financial account: {str(e)}"
@@ -312,6 +312,30 @@ def get_announcements_for_specific_courses(course_identifier: str) -> str:
     return json.dumps(announcements)
 
 
+def get_grades() -> str:
+    """
+    Gets grades for all enrolled courses in a simplified format.
+    
+    This function retrieves grades for all courses the student is enrolled in,
+    returning a simplified format with only essential information.
+    
+    :return: A JSON string of grades information for all courses.
+    """
+    grades = _canvas_service.get_simplified_grades()
+    return json.dumps(grades)
+
+
+def get_grades_for_course(course_identifier: str) -> str:
+    """
+    Gets grades for a specific course in a simplified format.
+    
+    :param course_identifier: The course name, code, or ID (e.g., "CS115", "Machine Learning").
+    :return: A JSON string of grades information for the specified course.
+    """
+    grades = _canvas_service.get_simplified_grades(course_identifier)
+    return json.dumps(grades)
+
+
 # Register all functions
 user_functions: Set[Callable[..., Any]] = {
     get_course_assignments,
@@ -323,7 +347,8 @@ user_functions: Set[Callable[..., Any]] = {
     navigate_to_workday_registration_sync,
     navigate_to_workday_financial_account_sync,
     get_advisors_info_sync,
-
+    get_grades,
+    get_grades_for_course,
 }
 # Define all the available user functions with their schemas
 user_functions_schema = [{
@@ -399,10 +424,21 @@ user_functions_schema = [{
             }
         }
     }
-},
-{
+}, {
     "name": "get_advisors_info_sync",
     "description": "Gets advisor contact information scraped from Workday",
+    "parameters": {
+        "type": "object",
+        "properties": {}
+    }
+}, {
+    "name": "get_grades",
+    "description":
+    "Get grades for all enrolled courses in a simplified format.",
+    "parameters": {}
+}, {
+    "name": "get_grades_for_course",
+    "description": "Get grades for a specific course in a simplified format.",
     "parameters": {
         "type": "object",
         "properties": {}
