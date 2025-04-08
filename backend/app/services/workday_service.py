@@ -1,15 +1,18 @@
-import logging
-from playwright.sync_api import sync_playwright
-from dotenv import load_dotenv
-import os
-from typing import Optional, Dict, Any
-from datetime import datetime
-from pathlib import Path
+# app/services/workday_service_async.py
 
-load_dotenv()
+import os
+import logging
+from pathlib import Path
+from typing import Optional
+from datetime import datetime
+from playwright.async_api import async_playwright, BrowserContext, Page
+from dotenv import load_dotenv
+import asyncio
 
 logger = logging.getLogger(__name__)
 user_data_dir = str(Path(__file__).parent / "chrome_profile")
+
+load_dotenv()
 
 
 class WorkdayService:
@@ -19,9 +22,9 @@ class WorkdayService:
                  current_academic_year="",
                  current_academic_semester="",
                  graduate_level=""):
-        self.browser = playwright.chromium.launch_persistent_context(
-            user_data_dir=user_data_dir, headless=False)
-        self.page = self.browser.pages[0]
+        self.playwright = playwright
+        self.browser_context: Optional[BrowserContext] = None
+        self.page: Optional[Page] = None
         self.screenshots_dir = os.path.abspath(
             os.path.join(os.path.dirname(__file__), "..",
                          "navigation_screenshots"))
@@ -30,172 +33,190 @@ class WorkdayService:
         self.current_academic_semester = current_academic_semester or "2025 Fall Semester(09/02/2025-12/22/2025)"
         self.graduate_level = graduate_level or "Graduate"
         self.username = os.getenv("WORKDAY_USERNAME")
+        print(f"WORKDAY_USERNAME: {self.username}")
         self.password = os.getenv("WORKDAY_PASSWORD")
         self.logged_in = False
         self.advisors = []
+        self.browser_context = None
 
-    def scroll_until_visible(self,
-                             label: str,
-                             max_scrolls: int = 30,
-                             delay: int = 300):
-        for _ in range(max_scrolls):
-            el = self.page.locator(f"[data-automation-label='{label}']")
-            if el.count() > 0:
-                el.scroll_into_view_if_needed()
-                el.wait_for(state="visible", timeout=3000)
-                el.click()
-                print("True")
-                return True
-            else:
-                # Scroll the last loaded option to load more
-                last_visible = self.page.locator(
-                    "[data-automation-id='promptOption']").last
-                last_visible.scroll_into_view_if_needed()
-                self.page.wait_for_timeout(delay)
-        raise Exception(
-            f"Could not find label '{label}' after {max_scrolls} scrolls")
+    async def start(self):
+        print("[DEBUG] WorkdayService.start() called")
+        # playwright = await async_playwright().start()
+        print("[DEBUG] Playwright started")
+        self.browser_context = await self.playwright.chromium.launch_persistent_context(
+            user_data_dir=user_data_dir, headless=False)
+        pages = self.browser_context.pages
+        if pages and len(pages) > 0:
+            self.page = pages[0]
+        else:
+            self.page = await self.browser_context.new_page()
 
-    def login(self):
-        html_content = self.page.content()
+        self.page.set_default_timeout(30_000)
+        self.page.set_default_navigation_timeout(60_000)
+        asyncio.create_task(self._monitor_browser_close())
 
+    async def close(self):
+        print("[DEBUG] Closing WorkdayService browser...")
+        if self.browser_context:
+            await self.browser_context.close()
+            self.browser_context = None
+        if self.playwright:
+            await self.playwright.stop()
+            self.playwright = None  # Optional
+
+    async def _monitor_browser_close(self):
+        print("[DEBUG] Starting browser close watcher")
+        while True:
+            await asyncio.sleep(2)
+            if self.page and self.page.is_closed():
+                print("[DEBUG] Page was closed manually")
+                try:
+                    await self.close()
+                except Exception as e:
+                    print(f"[DEBUG] Browser was already closed: {e}")
+                break
+
+    async def login(self):
+        html_content = await self.page.content()
         if "Stevens Institute of Technology - Sign In" in html_content:
             print("Login page detected")
-            self.page.locator("input[name='credentials.passcode']").fill(
+            if not self.password:
+                raise ValueError(
+                    "WORKDAY_PASSWORD environment variable is not set")
+
+            await self.page.locator("input[name='credentials.passcode']").fill(
                 self.password)
-            self.page.get_by_role("button", name="Sign in").click()
+            await self.page.get_by_role("button", name="Sign in").click()
+            await self.page.wait_for_url("**/home.htmld", timeout=60_000)
 
-            self.page.wait_for_url("**/home.htmld", timeout=60_000)
-
-        landing_page_html = self.page.content()
-        if "https://wd5.myworkday.com/stevens/d/home.htmld" in landing_page_html or "window.workday" in landing_page_html:
+        landing_page_html = await self.page.content()
+        if "window.workday" in landing_page_html:
             self.logged_in = True
             return True
         else:
             return False
 
-    def navigate_to_workday_registration(self):
+    async def navigate_to_workday_registration(self, stay_open: bool = False):
         try:
-            self.page.goto("https://www.stevens.edu/it/services/workday")
-            self.page.click("text=Log in to Workday")
-            self.page.wait_for_timeout(2000)
+            print("======Navigating to Workday registration page")
+            await self.page.goto("https://www.stevens.edu/it/services/workday")
+            await self.page.click("text=Log in to Workday")
+            await self.page.wait_for_timeout(2000)
 
-            time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-
-            if self.login():
-                logger.info("Already logged in or login successful")
-                self.page.wait_for_timeout(3000)
-
-                # self.page.pause()
-
-                self.page.wait_for_selector("text=Academics", timeout=3000)
-                self.page.click("text=Academics")
-                academics_html = self.page.content()
+            if await self.login():
+                await self.page.wait_for_timeout(3000)
+                await self.page.click("text=Academics", timeout=10_000)
                 if not self.advisors:
-                    self.get_advisors()
-                self.page.wait_for_selector("text=Find Course Sections",
-                                            timeout=3000)
-                self.page.click("text=Find Course Sections")
+                    await self.get_advisors()
+                await self.page.click("text=Find Course Sections",
+                                      timeout=10_000)
 
-                self.page.wait_for_timeout(6000)
-
-                print(
-                    "Clicking Start Date within field via stable selector...")
+                # Select calendar start date
                 start_date_input = self.page.locator(
                     "[data-uxi-element-id='selectinput-15$456818']")
-                start_date_input.wait_for(state="visible")
-                start_date_input.scroll_into_view_if_needed()
-                start_date_input.click()
-
-                self.page.wait_for_timeout(500)
-
-                # Select "Semester Academic Calendar"
-                self.page.locator(
+                await start_date_input.wait_for(state="visible")
+                await start_date_input.scroll_into_view_if_needed()
+                await start_date_input.click()
+                await self.page.wait_for_timeout(500)
+                await self.page.locator(
                     "[data-automation-label='Semester Academic Calendar']"
                 ).click()
-
-                # select academic year
-                self.scroll_until_visible(self.current_academic_year)
+                await self.scroll_until_visible(self.current_academic_year)
 
                 semester = self.page.locator(
                     f"[data-automation-label='{self.current_academic_semester}']"
                 )
-                semester.scroll_into_view_if_needed()
-                semester.wait_for(state="visible")
-                semester.click()
+                await semester.scroll_into_view_if_needed()
+                await semester.wait_for(state="visible")
+                await semester.click()
 
-                # academic level input
+                # Academic level
                 level_input = self.page.locator(
                     "[data-uxi-element-id='selectinput-15$463917']")
-                level_input.type(self.graduate_level, delay=100)
-                self.page.keyboard.press("Enter")
-                self.page.wait_for_timeout(2000)
-
+                await level_input.type(self.graduate_level, delay=100)
+                await self.page.keyboard.press("Enter")
+                await self.page.wait_for_timeout(2000)
                 grad_option = self.page.locator(
                     f"[data-automation-label='{self.graduate_level}']")
-                grad_option.scroll_into_view_if_needed()
-                grad_option.wait_for(state="visible", timeout=5000)
-                grad_option.click()
+                await grad_option.scroll_into_view_if_needed()
+                await grad_option.wait_for(state="visible", timeout=5000)
+                await grad_option.click()
 
-                # Submit the form
+                # Submit
                 ok_button = self.page.locator(
                     "[data-automation-id='wd-CommandButton_uic_okButton']")
-                with self.page.expect_navigation(wait_until='load',
-                                                 timeout=10000):
-                    ok_button.click()
-                self.page.wait_for_load_state("networkidle")
+                async with self.page.expect_navigation(wait_until='load',
+                                                       timeout=10000):
+                    await ok_button.click()
+                await self.page.wait_for_load_state("networkidle")
+                try:
+                    await self.page.get_by_text(
+                        "Find Course Sections",
+                        exact=True).wait_for(timeout=10000)
+                except Exception as e:
+                    print(
+                        f"[DEBUG] Error waiting for 'Find Course Sections' button: {e}"
+                    )
 
-                self.page.wait_for_selector(
-                    "[data-automation-id='resultsContainer']", timeout=30_000)
-
-                self.page.wait_for_timeout(3000)
-
-                # Final screenshot
-                course_reg_screenshot_path = os.path.join(
+                screenshot_path = os.path.join(
                     self.screenshots_dir,
-                    f"workday_course_section/selected_calendar_{time}.png")
-                os.makedirs(os.path.dirname(course_reg_screenshot_path),
-                            exist_ok=True)
-                self.page.wait_for_timeout(2000)
-                self.page.screenshot(path=course_reg_screenshot_path)
+                    f"workday_course_section/selected_calendar_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png"
+                )
+                os.makedirs(os.path.dirname(screenshot_path), exist_ok=True)
+                await self.page.wait_for_timeout(2000)
+                await self.page.screenshot(path=screenshot_path)
 
-                input("Press Enter to exit and close the browser...")
+                if not stay_open:
+                    print("[DEBUG] Delaying close for 10 sec (demo mode)")
+                    await asyncio.sleep(10)  # Delay for demo purposes
+                    await self.close()
+                else:
+                    print("[DEBUG] Leaving browser open (stay_open=True)")
 
                 return {
                     "success": True,
-                    "html": academics_html,
-                    "screenshot": course_reg_screenshot_path
+                    "message":
+                    "Navigated to Workday Course Registration successfully.",
+                    "screenshot": screenshot_path
                 }
             else:
-                logger.error("Login failed - Welcome page not detected")
                 return {
-                    "success": False,
+                    "success":
+                    False,
                     "error":
                     "Login failed - could not reach Workday registration page",
-                    "html": None
                 }
 
         except Exception as e:
-            logger.error(
-                f"Error during navigation to Workday registration: {str(e)}")
+            logger.error(f"[navigate_to_workday_registration] Error: {str(e)}")
             return {"success": False, "error": str(e), "html": None}
 
-    def navigate_to_workday_financial_account(self):
+    async def navigate_to_workday_financial_account(self, stay_open):
         try:
-            self.page.goto("https://www.stevens.edu/it/services/workday")
-            self.page.click("text=Log in to Workday")
-            self.page.wait_for_timeout(2000)
-            if self.login():
-                logger.info("Already logged in or login successful")
-                self.page.wait_for_timeout(3000)
-                self.page.click("text=Finances")
-                self.page.wait_for_timeout(5000)
+            await self.page.goto("https://www.stevens.edu/it/services/workday")
+            await self.page.click("text=Log in to Workday")
+            await self.page.wait_for_timeout(2000)
+
+            if await self.login():
+                # await self.page.click("text=Finances")
+                # await self.page.wait_for_timeout(5000)
+                finances_button = self.page.locator(
+                    "button[aria-label='Finances']")
+                await finances_button.scroll_into_view_if_needed()
+                await finances_button.wait_for(state="visible")
+                await finances_button.click()
                 screenshot_path = os.path.join(
                     self.screenshots_dir,
                     f"workday_financial_account/financial_account_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png"
                 )
-
                 os.makedirs(os.path.dirname(screenshot_path), exist_ok=True)
-                self.page.screenshot(path=screenshot_path)
+                await self.page.screenshot(path=screenshot_path)
+                if not stay_open:
+                    print("[DEBUG] Delaying close for 5 sec (demo mode)")
+                    await asyncio.sleep(5)  # Delay for demo purposes
+                    await self.close()
+                else:
+                    print("[DEBUG] Leaving browser open (stay_open=True)")
 
                 return {
                     "success": True,
@@ -204,7 +225,6 @@ class WorkdayService:
                     "screenshot": screenshot_path
                 }
             else:
-                logger.error("Login failed - Welcome page not detected")
                 return {
                     "success": False,
                     "error":
@@ -214,17 +234,35 @@ class WorkdayService:
 
         except Exception as e:
             logger.error(
-                f"Error during navigation to Workday financial account: {str(e)}"
-            )
+                f"[navigate_to_workday_financial_account] Error: {str(e)}")
             return {"success": False, "error": str(e), "html": None}
 
-    def get_advisors(self):
-        # Wait for the specific section to be visible
-        self.page.wait_for_selector(
-            "[aria-label='Important Contacts Support Network'] table",
-            timeout=10_000)
+    async def scroll_until_visible(self,
+                                   label: str,
+                                   max_scrolls: int = 30,
+                                   delay: int = 300):
+        for _ in range(max_scrolls):
+            el = self.page.locator(f"[data-automation-label='{label}']")
+            if await el.count() > 0:
+                await el.scroll_into_view_if_needed()
+                await el.wait_for(state="visible", timeout=3000)
+                await el.click()
+                return True
+            else:
+                last_visible = self.page.locator(
+                    "[data-automation-id='promptOption']").last
+                await last_visible.scroll_into_view_if_needed()
+                await self.page.wait_for_timeout(delay)
+        raise Exception(
+            f"Could not find label '{label}' after {max_scrolls} scrolls")
 
-        advisors = self.page.evaluate("""
+    async def get_advisors(self):
+        # Wait for the specific section to be visible
+        await self.page.wait_for_selector(
+            "[aria-label='Important Contacts Support Network'] table",
+            timeout=20_000)
+
+        advisors = await self.page.evaluate("""
             () => {
                 const section = document.querySelector("[aria-label='Important Contacts Support Network']");
                 if (!section) return [];
@@ -250,19 +288,26 @@ class WorkdayService:
         print("Advisor info:", advisors)
         self.advisors = advisors
 
-    def close(self):
-        self.browser.close()
+    def get_advisors_list(self):
+        return self.advisors
 
 
-if __name__ == "__main__":
-    with sync_playwright() as p:
-        service = WorkdayService(p)
-        # service.navigate_to_workday_registration()
-        service.navigate_to_workday_financial_account()
-    # service.navigate_to_workday_registration()
-    # with sync_playwright() as p:
-    #     service = WorkdayService(p)
-    #     try:
-    #         service.navigate_to_workday_financial_account()
-    #     finally:
-    #         service.close()
+# if __name__ == "__main__":
+#     import asyncio
+
+#     async def main():
+#         from playwright.async_api import async_playwright
+
+#         async with async_playwright() as playwright:
+#             service = WorkdayService(playwright)
+#             await service.start()
+
+#             # Choose what to test:
+#             result = await service.navigate_to_workday_registration()
+#             # result = await service.navigate_to_workday_financial_account()
+
+#             print("Result:", result)
+
+#             await service.close()
+
+#     asyncio.run(main())

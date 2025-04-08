@@ -2,15 +2,17 @@ from typing import Any, Set, Callable, Optional
 import json
 from app.services.canvas_service import CanvasService
 from app.services.stevens_service import StevensService
-# from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright
 from app.services.workday_service import WorkdayService
+import asyncio
 import os
+from threading import Thread
 
 # Create singleton instances
 _canvas_service = CanvasService()
 _stevens_service = StevensService()
-# with sync_playwright() as p:
-#     _workday_service = WorkdayService(p)
+with sync_playwright() as p:
+    _workday_service = WorkdayService(p)
 
 
 def get_course_assignments(course_identifier: str) -> str:
@@ -177,8 +179,28 @@ def login_to_workday(username: Optional[str] = None,
         pass
 
 
-def navigate_to_workday_registration(mock_mode: bool = False) -> str:
+def get_grades() -> str:
+    """
+    Gets grades for all enrolled courses in a simplified format.
+    
+    This function retrieves grades for all courses the student is enrolled in,
+    returning a simplified format with only essential information.
+    
+    :return: A JSON string of grades information for all courses.
+    """
+    grades = _canvas_service.get_simplified_grades()
+    return json.dumps(grades)
 
+def get_grades_for_course(course_identifier: str) -> str:
+    """
+    Gets grades for a specific course in a simplified format.
+    
+    :param course_identifier: The course name, code, or ID (e.g., "CS115", "Machine Learning").
+    :return: A JSON string of grades information for the specified course.
+    """
+    grades = _canvas_service.get_simplified_grades(course_identifier)
+    return json.dumps(grades)
+def navigate_to_workday_registration(mock_mode: bool = False) -> str:
     """
     Navigate to the course registration page in Workday.
     This will first ensure you are logged in, then navigate to the registration page.
@@ -272,60 +294,17 @@ def navigate_to_workday_registration(mock_mode: bool = False) -> str:
             f"Error navigating to course registration: {str(e)}"
         })
 
-def get_course_registration_advice(program: str = None, course_type: str = None) -> str:
-    """
-    Provides advice for students about course registration process.
-    
-    :param program: Student's program (e.g., 'AAI', 'CS', 'EE')
-    :param course_type: Type of course to register for (e.g., 'CS', 'core', 'elective')
-    :return: A JSON string with registration advice
-    """
-    # Default advice for all students
-    advice = {
-        "general_advice": "You should first consult your academic and faculty advisor to get approval.",
-        "next_steps": [
-            "Schedule a meeting with your academic advisor",
-            "Discuss your course plan and get approval",
-            "Follow the registration procedure in Workday"
-        ]
-    }
-    
-    return json.dumps(advice)
-
-def get_grades() -> str:
-    """
-    Gets grades for all enrolled courses in a simplified format.
-    
-    This function retrieves grades for all courses the student is enrolled in,
-    returning a simplified format with only essential information.
-    
-    :return: A JSON string of grades information for all courses.
-    """
-    grades = _canvas_service.get_simplified_grades()
-    return json.dumps(grades)
-
-def get_grades_for_course(course_identifier: str) -> str:
-    """
-    Gets grades for a specific course in a simplified format.
-    
-    :param course_identifier: The course name, code, or ID (e.g., "CS115", "Machine Learning").
-    :return: A JSON string of grades information for the specified course.
-    """
-    grades = _canvas_service.get_simplified_grades(course_identifier)
-    return json.dumps(grades)
 
 # Register all functions
 user_functions: Set[Callable[..., Any]] = {
     get_course_assignments,
     get_current_courses,
     get_upcoming_courses_assignments,
-    get_academic_calendar_event,
     get_program_requirements,
     get_announcements_for_all_courses,
     get_announcements_for_specific_courses,
     login_to_workday,
     navigate_to_workday_registration,
-    get_course_registration_advice,
     get_grades,
     get_grades_for_course,
 }
@@ -367,32 +346,7 @@ user_functions_schema = [{
         "required": ["course_identifier"]
     }
 }, {
-    "name": "login_to_workday",
-    "description":
-    "Log in to the Stevens Workday system. This will open a browser window where you can enter your credentials.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "username": {
-                "type":
-                "string",
-                "description":
-                "Optional username (will attempt to use environment variable if not provided)"
-            },
-            "password": {
-                "type":
-                "string",
-                "description":
-                "Optional password (will attempt to use environment variable if not provided)"
-            },
-            "mock_mode": {
-                "type": "boolean",
-                "description": "Use mock mode for testing without Playwright"
-            }
-        }
-    }
-}, {
-    "name": "navigate_to_workday_registration",
+    "name": "navigate_to_workday_registration_sync",
     "description":
     "Navigate to the course registration page in Workday. This will open a browser and prompt you to enter your credentials if not already logged in.",
     "parameters": {
@@ -401,8 +355,41 @@ user_functions_schema = [{
             "mock_mode": {
                 "type": "boolean",
                 "description": "Use mock mode for testing without Playwright"
+            },
+            "stay_open": {
+                "type":
+                "boolean",
+                "description":
+                "Stay open the browser after navigating to the registration page, set to true"
             }
         }
+    }
+}, {
+    "name": "navigate_to_workday_financial_account_sync",
+    "description":
+    "Navigate to the financial account page in Workday. This will open a browser and prompt you to enter your credentials if not already logged in.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "mock_mode": {
+                "type": "boolean",
+                "description": "Use mock mode for testing without Playwright"
+            },
+            "stay_open": {
+                "type":
+                "boolean",
+                "description":
+                "Stay open the browser after navigating to the financial account page, set to true"
+            }
+        }
+    }
+},
+{
+    "name": "get_advisors_info_sync",
+    "description": "Gets advisor contact information scraped from Workday",
+    "parameters": {
+        "type": "object",
+        "properties": {}
     }
 }, {
     "name": "get_grades",
