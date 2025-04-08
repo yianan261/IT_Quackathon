@@ -112,11 +112,10 @@ async def navigate_to_workday_financial_account(mock_mode: bool = False,
 
     except Exception as e:
         return json.dumps({
-            xw"success":
-            False,
-            "error":
-            f"Error navigating to financial account: {str(e)}"
+            "success": False,
+            "error": f"Error navigating to financial account: {str(e)}"
         })
+
 
 
 async def get_advisors_info() -> str:
