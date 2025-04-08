@@ -291,6 +291,29 @@ def get_course_registration_advice(program: str = None, course_type: str = None)
     }
     
     return json.dumps(advice)
+
+def get_grades() -> str:
+    """
+    Gets grades for all enrolled courses in a simplified format.
+    
+    This function retrieves grades for all courses the student is enrolled in,
+    returning a simplified format with only essential information.
+    
+    :return: A JSON string of grades information for all courses.
+    """
+    grades = _canvas_service.get_simplified_grades()
+    return json.dumps(grades)
+
+def get_grades_for_course(course_identifier: str) -> str:
+    """
+    Gets grades for a specific course in a simplified format.
+    
+    :param course_identifier: The course name, code, or ID (e.g., "CS115", "Machine Learning").
+    :return: A JSON string of grades information for the specified course.
+    """
+    grades = _canvas_service.get_simplified_grades(course_identifier)
+    return json.dumps(grades)
+
 # Register all functions
 user_functions: Set[Callable[..., Any]] = {
     get_course_assignments,
@@ -303,6 +326,8 @@ user_functions: Set[Callable[..., Any]] = {
     login_to_workday,
     navigate_to_workday_registration,
     get_course_registration_advice,
+    get_grades,
+    get_grades_for_course,
 }
 
 # Define all the available user functions with their schemas
@@ -378,5 +403,25 @@ user_functions_schema = [{
                 "description": "Use mock mode for testing without Playwright"
             }
         }
+    }
+}, {
+    "name": "get_grades",
+    "description": "Get grades for all courses the student is enrolled in, in a simplified format with only essential information",
+    "parameters": {
+        "type": "object",
+        "properties": {}
+    }
+}, {
+    "name": "get_grades_for_course",
+    "description": "Get grades for a specific course in a simplified format with only essential information",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "course_identifier": {
+                "type": "string",
+                "description": "Course name, code, or ID (e.g., 'CS115', 'Machine Learning')"
+            }
+        },
+        "required": ["course_identifier"]
     }
 }]

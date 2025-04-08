@@ -119,6 +119,55 @@ async def test_canvas_annoucements():
     return {"announcements": announcements}
 
 
+@app.get("/test/canvas/grades")
+async def test_canvas_grades_all_courses():
+    """
+    Test endpoint for Canvas grades API.
+    Retrieves grades for all courses.
+    """
+    grades = canvas.get_grades_for_all_courses()
+    return {"grades": grades}
+
+
+@app.get("/test/canvas/grades/{course_identifier}")
+async def test_canvas_grades_for_course(course_identifier: str):
+    """
+    Test endpoint for Canvas grades API for a specific course.
+    Retrieves grades for the specified course.
+    
+    Parameters:
+        course_identifier: The course ID, name, or code (e.g., "CS115", "Machine Learning")
+    """
+    grades = canvas.get_grades_for_course(course_identifier)
+    return {
+        "course": course_identifier,
+        "grades": grades
+    }
+
+
+@app.get("/test/canvas/simplified-grades")
+async def test_canvas_simplified_grades():
+    """
+    Test endpoint for simplified Canvas grades API.
+    Retrieves grades for all courses in a simplified format.
+    """
+    simplified_grades = canvas.get_simplified_grades()
+    return simplified_grades
+
+
+@app.get("/test/canvas/simplified-grades/{course_identifier}")
+async def test_canvas_simplified_grades_for_course(course_identifier: str):
+    """
+    Test endpoint for simplified Canvas grades API for a specific course.
+    Retrieves grades for the specified course in a simplified format.
+    
+    Parameters:
+        course_identifier: The course ID, name, or code (e.g., "CS115", "Machine Learning")
+    """
+    simplified_grades = canvas.get_simplified_grades(course_identifier)
+    return simplified_grades
+
+
 @app.get("/test/automation")
 async def test_automation():
     """

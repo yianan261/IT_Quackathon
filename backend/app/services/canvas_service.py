@@ -509,5 +509,62 @@ class CanvasService:
         except Exception as e:
             logger.error(f"Error fetching grades for all courses: {str(e)}")
             return {"courses": []}
+            
+    def get_simplified_grades(self, course: Union[int, str, List[Dict]] = None) -> Dict:
+        """
+        Get grades in a simplified format with only essential information.
+        
+        Parameters:
+            course (Union[int, str, List[Dict]], optional):
+                - If None, fetches grades for all courses.
+                - Otherwise, same as get_grades_for_course.
+                
+        Returns:
+            Dict: In the simplified format {"courses": [ { "course_name": ..., "course_grade": {...}, ...} ] }
+        """
+        try:
+            # Get full grades data
+            if course is None:
+                full_grades = self.get_grades_for_all_courses()
+            else:
+                full_grades = self.get_grades_for_course(course)
+            
+            # Filter to simplified format
+            simplified_courses = []
+            for course_data in full_grades.get("courses", []):
+                # Filter course grade info
+                course_grade = course_data.get("course_grade", {})
+                simplified_course_grade = {}
+                if course_grade:
+                    simplified_course_grade = {
+                       
+                        "current_score": course_grade.get("current_score")
+                    }
+                
+                # Filter assignment submissions
+                simplified_submissions = []
+                for submission in course_data.get("submissions", []):
+                    # Only include submissions that have a grade
+                    if submission.get("grade"):
+                        simplified_submissions.append({
+                            "assignment_name": submission.get("assignment_name"),
+                            "grade": submission.get("grade")
+                        })
+                
+                # Create simplified course entry
+                simplified_course = {
+                    "course_name": course_data.get("course_name"),
+                    "course_grade": simplified_course_grade,
+                    "grades_url": course_data.get("grades_url"),
+                    "submissions": simplified_submissions
+                }
+                
+                simplified_courses.append(simplified_course)
+            
+            return {"courses": simplified_courses}
+            
+        except Exception as e:
+            logger.error(f"Error fetching simplified grades: {str(e)}")
+            return {"courses": []}
 
  
