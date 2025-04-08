@@ -37,7 +37,7 @@ async def stream_text_to_speech(self, text: str, stream_callback):
     <speak version='1.0' xml:lang='en-US'>
         <voice name='en-US-JennyMultilingualNeural'>
             <prosody rate='medium' pitch='+0st'>
-                <mstts:express-as style="chat" styledegree="2.5">
+                <mstts:express-as style="chat" styledegree="3.0">
                     {text}
                 </mstts:express-as>
             </prosody>
