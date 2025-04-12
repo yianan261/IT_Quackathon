@@ -1,7 +1,6 @@
 // Global configuration
 window.ALLOWED_DOMAINS = [
-  'sit.instructure.com',
-  'wd5.myworkday.com/stevens'
+  // 允许在所有网站上显示聊天机器人
 ];
 
 // Set API endpoint
