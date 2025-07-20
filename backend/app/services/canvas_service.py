@@ -20,10 +20,18 @@ class CanvasService:
     def __init__(self):
         self.base_url = "https://sit.instructure.com/api/v1/"
         self.canvas_token = settings.CANVAS_API_KEY
-        self.headers = {"Authorization": f"Bearer {self.canvas_token}"}
+        self.headers = {"Authorization": f"Bearer {self.canvas_token}"} if self.canvas_token else {}
+        
+        # Check if Canvas API is configured
+        if not self.canvas_token:
+            logger.warning("Canvas API key not configured. Canvas functionality will be limited.")
 
     def get_current_courses(self) -> List[Dict]:
         """Get list of current courses"""
+        if not self.canvas_token:
+            logger.error("Canvas API key not configured")
+            return []
+            
         try:
             url = f"{self.base_url}/courses"
             logger.info(f"Fetching courses from: {url}")

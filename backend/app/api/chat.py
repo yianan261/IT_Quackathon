@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Dict
 from app.services.model_service import ModelService
-from app.context import get_service_context
+
 import re
 import logging
 import json
@@ -62,7 +62,7 @@ async def chat(
     model_service: ModelService = Depends(get_model_service)
 ) -> ChatResponse:
     try:
-        # Get completion from Azure agent
+        # Get completion from LangChain agent with tools
         response = await model_service.get_completion(
             messages=[{
                 "role": msg.role,

@@ -7,14 +7,17 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Stevens AI Assistant"
 
     OPENAI_API_KEY: Optional[str] = None
+    OPENAI_MODEL: str = "gpt-4-turbo-preview"
+    MAX_TOKENS: int = 1000
 
     VECTOR_DB_PATH: str = "vector_db"
 
-    CANVAS_API_URL: str
-    CANVAS_API_KEY: str
+    CANVAS_API_URL: Optional[str] = "https://stevens.instructure.com/api/v1"
+    CANVAS_API_KEY: Optional[str] = "1030~2PcFfvh6H9WGCQZyYBRzHCkHG2RFMNXVU4kFzNv2WDVENeMtMwkHuhhFPhfKkVZQ"
 
-    CONN_STR: str
-    AGENT_ID: str
+    # Azure-specific settings (deprecated, no longer used)
+    # CONN_STR: str
+    # AGENT_ID: str
 
     DATABASE_URL: str = "sqlite:///./dummy.db"
 

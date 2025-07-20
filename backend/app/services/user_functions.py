@@ -1,12 +1,12 @@
-from typing import Any, Set, Callable, Optional
+from typing import Any, List, Dict, Optional, Union
 import json
+import asyncio
+from threading import Thread
+from langchain_core.tools import tool
 from app.services.canvas_service import CanvasService
 from app.services.stevens_service import StevensService
 from playwright.async_api import async_playwright
 from app.services.workday_service import WorkdayService
-import asyncio
-import os
-from threading import Thread
 
 # Create singleton instances
 _canvas_service = CanvasService()
@@ -20,155 +20,11 @@ async def get_workday_service() -> WorkdayService:
     if _workday_service is None:
         playwright = await async_playwright().start()
         _workday_service = WorkdayService(playwright)
-
         await _workday_service.start()
     return _workday_service
 
 
-async def navigate_to_workday_registration(mock_mode: bool = False,
-                                           stay_open: bool = False) -> str:
-    """
-    Navigate to the course registration page in Workday.
-    This will open a browser and prompt you to enter your credentials if not already logged in.
-
-    Args:
-        mock_mode: Use mock mode for testing without Playwright installed
-
-    Returns:
-        JSON string with navigation results
-    """
-    try:
-        service = await get_workday_service()
-        result = await service.navigate_to_workday_registration(stay_open)
-
-        print(
-            f"***************Navigated to Workday registration page: {result}")
-
-        final_result = {
-            "success":
-            result["success"],
-            "message":
-            result["message"],
-            "screenshot":
-            result.get("screenshot"),
-            "human_message":
-            ("✅ I've redirected you to the Workday course registration page.\n\n"
-             "ℹ️ Here's more information on how you can register for courses: "
-             "https://support.stevens.edu/support/solutions/articles/19000082229"
-             ) if result["success"] else
-            "❌ I couldn't navigate to the registration page."
-        }
-        if not stay_open:
-            await service.close()
-
-        print("[DEBUG] Tool result returned to agent:",
-              json.dumps(final_result))
-
-        return json.dumps(final_result)
-
-    except Exception as e:
-        return json.dumps({
-            "success":
-            False,
-            "error":
-            f"Error navigating to registration: {str(e)}",
-            "human_message":
-            "❌ I couldn't navigate to the registration page. Try logging in manually at https://stevens.okta.com/"
-        })
-
-
-async def navigate_to_workday_financial_account(mock_mode: bool = False,
-                                                stay_open: bool = False
-                                                ) -> str:
-    """
-    Navigate to the financial account page in Workday.
-    This will open a browser and prompt you to enter your credentials if not already logged in.
-
-    Args:
-        mock_mode: Use mock mode for testing without Playwright installed
-
-    Returns:
-        JSON string with navigation results
-    """
-    try:
-        service = await get_workday_service()
-        result = await service.navigate_to_workday_financial_account(stay_open)
-
-        if not stay_open:
-            await service.close()
-
-        return json.dumps({
-            "success":
-            result["success"],
-            "message":
-            result["message"],
-            "screenshot":
-            result.get("screenshot"),
-            "human_message":
-            ("✅ I've redirected you to the Workday financial account page.\n\n"
-             ) if result["success"] else
-            "❌ I couldn't navigate to the financial account page."
-        })
-
-    except Exception as e:
-        return json.dumps({
-            "success":
-            False,
-            "error":
-            f"Error navigating to financial account: {str(e)}"
-        })
-
-
-async def get_advisors_info() -> str:
-    """
-    Retrieves advisor information scraped from Workday.
-    """
-    try:
-        service = await get_workday_service()
-        advisors = service.get_advisors_list()
-        return json.dumps({
-            "success":
-            True,
-            "advisors":
-            advisors,
-            "human_message":
-            ("📘 Here are your advisors:\n" +
-             "\n".join(f"- {a['role']}: {a['person']} ({a['email']})"
-                       for a in advisors) if advisors else
-             "⚠️ No advisor information available. Try visiting Workday first."
-             )
-        })
-    except Exception as e:
-        return json.dumps({
-            "success":
-            False,
-            "error":
-            str(e),
-            "human_message":
-            "⚠️ I couldn't retrieve your advisor info."
-        })
-
-
-async def shutdown_workday_browser() -> str:
-    try:
-        if _workday_service:
-            await _workday_service.close()
-            return json.dumps({
-                "success": True,
-                "message": "Browser closed successfully."
-            })
-        return json.dumps({
-            "success": False,
-            "message": "WorkdayService is not active."
-        })
-    except Exception as e:
-        return json.dumps({"success": False, "error": str(e)})
-
-
-def shutdown_workday_browser_sync() -> str:
-    return run_async_tool(shutdown_workday_browser())
-
-
+# Background loop for async operations
 _background_loop = asyncio.new_event_loop()
 
 
@@ -178,13 +34,12 @@ def _start_background_loop(loop):
 
 
 # Start the background thread
-t = Thread(target=_start_background_loop,
-           args=(_background_loop, ),
-           daemon=True)
+t = Thread(target=_start_background_loop, args=(_background_loop,), daemon=True)
 t.start()
 
 
 def run_async_tool(tool_coro):
+    """Helper to run async tools in sync context"""
     print("[DEBUG] run_async_tool: scheduling on background loop")
     try:
         future = asyncio.run_coroutine_threadsafe(tool_coro, _background_loop)
@@ -199,47 +54,41 @@ def run_async_tool(tool_coro):
         })
 
 
-# sync wrapper for async functions
-def navigate_to_workday_registration_sync(mock_mode: bool = False) -> str:
-    print("[DEBUG] Called sync wrapper for registration")
-    return run_async_tool(navigate_to_workday_registration(mock_mode))
-
-
-def navigate_to_workday_financial_account_sync(mock_mode: bool = False) -> str:
-    print("[DEBUG] Called sync wrapper for financial")
-    return run_async_tool(navigate_to_workday_financial_account(mock_mode))
-
-
-def get_advisors_info_sync() -> str:
-    return run_async_tool(get_advisors_info())
-
-
-def get_course_assignments(course_identifier: str) -> str:
-    """
-    Gets upcoming assignments for a specific course.
-
-    :param course_identifier: The course name or ID (e.g., "CS115", "Machine Learning").
-    :return: A JSON string of assignment information.
-    """
-    assignments = _canvas_service.get_assignments_for_course(course_identifier)
-    return json.dumps(assignments)
-
-
+# LangChain Tools
+@tool
 def get_current_courses() -> str:
     """
-    Gets all current courses for the student.
-
-    :return: A JSON string of course information.
+    Get all current courses for the student.
+    
+    Returns:
+        str: A JSON string containing information about all enrolled courses.
     """
     courses = _canvas_service.get_current_courses()
     return json.dumps(courses)
 
 
+@tool
+def get_course_assignments(course_identifier: str) -> str:
+    """
+    Get upcoming assignments for a specific course.
+    
+    Args:
+        course_identifier: The course name, code, or ID (e.g., "CS115", "Machine Learning")
+        
+    Returns:
+        str: A JSON string containing assignment information for the specified course.
+    """
+    assignments = _canvas_service.get_assignments_for_course(course_identifier)
+    return json.dumps(assignments)
+
+
+@tool
 def get_upcoming_courses_assignments() -> str:
     """
-    Gets upcoming assignments for all enrolled courses.
-
-    :return: A JSON string of assignments for all courses.
+    Get upcoming assignments for all enrolled courses.
+    
+    Returns:
+        str: A JSON string containing assignments for all courses.
     """
     courses = _canvas_service.get_current_courses()
     all_assignments = []
@@ -255,42 +104,46 @@ def get_upcoming_courses_assignments() -> str:
     return json.dumps({"courses": all_assignments})
 
 
-# TODO: add db, these info will either be stored in db or vector db
-def get_academic_calendar_event(event_type: str) -> str:
+@tool
+def get_grades() -> str:
     """
-    Gets information about academic calendar events.
-
-    :param event_type: Type of academic calendar event (e.g., 'spring break', 'finals week').
-    :return: A JSON string of calendar event information.
+    Get grades for all enrolled courses in a simplified format.
+    
+    Returns:
+        str: A JSON string containing grades information for all courses.
     """
-    event = _stevens_service.get_calendar_event(event_type)
-    return json.dumps(event)
+    grades = _canvas_service.get_simplified_grades()
+    return json.dumps(grades)
 
 
-# TODO: add db, these info will either be stored in db or vector db
-def get_program_requirements(program: str) -> str:
+@tool
+def get_grades_for_course(course_identifier: str) -> str:
     """
-    Gets course requirements for a specific degree program.
-
-    :param program: Degree program name (e.g., 'AAI masters', 'Computer Science PhD').
-    :return: A JSON string of program requirements.
+    Get grades for a specific course in a simplified format.
+    
+    Args:
+        course_identifier: The course name, code, or ID (e.g., "CS115", "Machine Learning")
+        
+    Returns:
+        str: A JSON string containing grades information for the specified course.
     """
-    requirements = _stevens_service.get_program_requirements(program)
-    return json.dumps(requirements)
+    grades = _canvas_service.get_simplified_grades(course_identifier)
+    return json.dumps(grades)
 
 
+@tool
 def get_announcements_for_all_courses() -> str:
     """
-    Gets announcements for all enrolled courses.
-
-    :return: A JSON string of announcements for all courses.
+    Get announcements for all enrolled courses.
+    
+    Returns:
+        str: A JSON string containing announcements for all courses.
     """
     courses = _canvas_service.get_current_courses()
     all_announcements = []
 
     for course in courses:
-        announcements = _canvas_service.get_announcements_for_course(
-            course['id'])
+        announcements = _canvas_service.get_announcements_for_course(course['id'])
         if announcements:
             all_announcements.append({
                 "course_name": course["name"],
@@ -300,147 +153,207 @@ def get_announcements_for_all_courses() -> str:
     return json.dumps({"courses": all_announcements})
 
 
+@tool
 def get_announcements_for_specific_courses(course_identifier: str) -> str:
     """
-    Gets announcements for specific courses.
-
-    :param course_identifier: Course code or name (e.g., 'EE 553', 'C++').
-    :return: A JSON string of announcements for the specified course.
+    Get announcements for a specific course.
+    
+    Args:
+        course_identifier: Course code or name (e.g., 'EE 553', 'C++')
+        
+    Returns:
+        str: A JSON string containing announcements for the specified course.
     """
-    announcements = _canvas_service.get_announcements_for_course(
-        course_identifier)
+    announcements = _canvas_service.get_announcements_for_course(course_identifier)
     return json.dumps(announcements)
 
 
-def get_grades() -> str:
+@tool
+def get_program_requirements(program: str) -> str:
     """
-    Gets grades for all enrolled courses in a simplified format.
+    Get course requirements for a specific degree program.
     
-    This function retrieves grades for all courses the student is enrolled in,
-    returning a simplified format with only essential information.
+    Args:
+        program: Degree program name (e.g., 'AAI masters', 'Computer Science PhD')
+        
+    Returns:
+        str: A JSON string containing program requirements.
+    """
+    requirements = _stevens_service.get_program_requirements(program)
+    return json.dumps(requirements)
+
+
+@tool
+def get_academic_calendar_event(event_type: str) -> str:
+    """
+    Get information about academic calendar events.
     
-    :return: A JSON string of grades information for all courses.
+    Args:
+        event_type: Type of academic calendar event (e.g., 'spring break', 'finals week')
+        
+    Returns:
+        str: A JSON string containing calendar event information.
     """
-    grades = _canvas_service.get_simplified_grades()
-    return json.dumps(grades)
+    event = _stevens_service.get_calendar_event(event_type)
+    return json.dumps(event)
 
 
-def get_grades_for_course(course_identifier: str) -> str:
+@tool
+def navigate_to_workday_registration(mock_mode: bool = False, stay_open: bool = False) -> str:
     """
-    Gets grades for a specific course in a simplified format.
+    Navigate to the course registration page in Workday.
+    This will open a browser and prompt you to enter your credentials if not already logged in.
     
-    :param course_identifier: The course name, code, or ID (e.g., "CS115", "Machine Learning").
-    :return: A JSON string of grades information for the specified course.
+    Args:
+        mock_mode: Use mock mode for testing without Playwright installed
+        stay_open: Keep the browser open after navigation
+        
+    Returns:
+        str: A JSON string containing navigation results.
     """
-    grades = _canvas_service.get_simplified_grades(course_identifier)
-    return json.dumps(grades)
+    async def _navigate():
+        try:
+            service = await get_workday_service()
+            result = await service.navigate_to_workday_registration(stay_open)
+
+            print(f"***************Navigated to Workday registration page: {result}")
+
+            final_result = {
+                "success": result["success"],
+                "message": result["message"],
+                "screenshot": result.get("screenshot"),
+                "human_message": (
+                    "✅ I've redirected you to the Workday course registration page.\n\n"
+                    "ℹ️ Here's more information on how you can register for courses: "
+                    "https://support.stevens.edu/support/solutions/articles/19000082229"
+                ) if result["success"] else "❌ I couldn't navigate to the registration page."
+            }
+            
+            if not stay_open:
+                await service.close()
+
+            print("[DEBUG] Tool result returned to agent:", json.dumps(final_result))
+            return json.dumps(final_result)
+
+        except Exception as e:
+            return json.dumps({
+                "success": False,
+                "error": f"Error navigating to registration: {str(e)}",
+                "human_message": "❌ I couldn't navigate to the registration page. Try logging in manually at https://stevens.okta.com/"
+            })
+    
+    return run_async_tool(_navigate())
 
 
-# Register all functions
-user_functions: Set[Callable[..., Any]] = {
-    get_course_assignments,
+@tool
+def navigate_to_workday_financial_account(mock_mode: bool = False, stay_open: bool = False) -> str:
+    """
+    Navigate to the financial account page in Workday.
+    This will open a browser and prompt you to enter your credentials if not already logged in.
+    
+    Args:
+        mock_mode: Use mock mode for testing without Playwright installed
+        stay_open: Keep the browser open after navigation
+        
+    Returns:
+        str: A JSON string containing navigation results.
+    """
+    async def _navigate():
+        try:
+            service = await get_workday_service()
+            result = await service.navigate_to_workday_financial_account(stay_open)
+
+            if not stay_open:
+                await service.close()
+
+            return json.dumps({
+                "success": result["success"],
+                "message": result["message"],
+                "screenshot": result.get("screenshot"),
+                "human_message": (
+                    "✅ I've redirected you to the Workday financial account page.\n\n"
+                ) if result["success"] else "❌ I couldn't navigate to the financial account page."
+            })
+
+        except Exception as e:
+            return json.dumps({
+                "success": False,
+                "error": f"Error navigating to financial account: {str(e)}"
+            })
+    
+    return run_async_tool(_navigate())
+
+
+@tool
+def get_advisors_info() -> str:
+    """
+    Retrieve advisor information scraped from Workday.
+    
+    Returns:
+        str: A JSON string containing advisor contact information.
+    """
+    async def _get_advisors():
+        try:
+            service = await get_workday_service()
+            advisors = service.get_advisors_list()
+            return json.dumps({
+                "success": True,
+                "advisors": advisors,
+                "human_message": (
+                    "📘 Here are your advisors:\n" +
+                    "\n".join(f"- {a['role']}: {a['person']} ({a['email']})" for a in advisors)
+                    if advisors else "⚠️ No advisor information available. Try visiting Workday first."
+                )
+            })
+        except Exception as e:
+            return json.dumps({
+                "success": False,
+                "error": str(e),
+                "human_message": "⚠️ I couldn't retrieve your advisor info."
+            })
+    
+    return run_async_tool(_get_advisors())
+
+
+@tool
+def shutdown_workday_browser() -> str:
+    """
+    Close the Workday browser session.
+    
+    Returns:
+        str: A JSON string indicating success or failure.
+    """
+    async def _shutdown():
+        try:
+            if _workday_service:
+                await _workday_service.close()
+                return json.dumps({
+                    "success": True,
+                    "message": "Browser closed successfully."
+                })
+            return json.dumps({
+                "success": False,
+                "message": "WorkdayService is not active."
+            })
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+    
+    return run_async_tool(_shutdown())
+
+
+# Export all tools
+all_tools = [
     get_current_courses,
+    get_course_assignments,
     get_upcoming_courses_assignments,
-    get_program_requirements,
-    get_announcements_for_all_courses,
-    get_announcements_for_specific_courses,
-    navigate_to_workday_registration_sync,
-    navigate_to_workday_financial_account_sync,
-    get_advisors_info_sync,
     get_grades,
     get_grades_for_course,
-}
-# Define all the available user functions with their schemas
-user_functions_schema = [{
-    "name": "get_user_context",
-    "description":
-    "Retrieves context data for the user from multiple sources in a single call. The user profile comes from the User Service, while courses, assignments, and announcements come from Canvas API, and professors data comes from Stevens API. Use this to request several types of data at once. For example, to get profile and assignments information, call get_user_context(context_types=['profile', 'assignments']).",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "context_types": {
-                "type": "array",
-                "description": "List of context types to retrieve",
-                "items": {
-                    "type":
-                    "string",
-                    "enum": [
-                        "profile", "courses", "assignments", "announcements",
-                        "professors"
-                    ]
-                }
-            }
-        },
-        "required": ["context_types"]
-    }
-}, {
-    "name": "get_course_assignments",
-    "description": "Get assignments for a specific course",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "course_identifier": {
-                "type": "string",
-                "description": "Course name, code, or ID"
-            }
-        },
-        "required": ["course_identifier"]
-    }
-}, {
-    "name": "navigate_to_workday_registration_sync",
-    "description":
-    "Navigate to the course registration page in Workday. This will open a browser and prompt you to enter your credentials if not already logged in.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "mock_mode": {
-                "type": "boolean",
-                "description": "Use mock mode for testing without Playwright"
-            },
-            "stay_open": {
-                "type":
-                "boolean",
-                "description":
-                "Stay open the browser after navigating to the registration page, set to true"
-            }
-        }
-    }
-}, {
-    "name": "navigate_to_workday_financial_account_sync",
-    "description":
-    "Navigate to the financial account page in Workday. This will open a browser and prompt you to enter your credentials if not already logged in.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "mock_mode": {
-                "type": "boolean",
-                "description": "Use mock mode for testing without Playwright"
-            },
-            "stay_open": {
-                "type":
-                "boolean",
-                "description":
-                "Stay open the browser after navigating to the financial account page, set to true"
-            }
-        }
-    }
-}, {
-    "name": "get_advisors_info_sync",
-    "description": "Gets advisor contact information scraped from Workday",
-    "parameters": {
-        "type": "object",
-        "properties": {}
-    }
-}, {
-    "name": "get_grades",
-    "description":
-    "Get grades for all enrolled courses in a simplified format.",
-    "parameters": {}
-}, {
-    "name": "get_grades_for_course",
-    "description": "Get grades for a specific course in a simplified format.",
-    "parameters": {
-        "type": "object",
-        "properties": {}
-    }
-}]
+    get_announcements_for_all_courses,
+    get_announcements_for_specific_courses,
+    get_program_requirements,
+    get_academic_calendar_event,
+    navigate_to_workday_registration,
+    navigate_to_workday_financial_account,
+    get_advisors_info,
+    shutdown_workday_browser,
+]
