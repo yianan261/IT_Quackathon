@@ -10,6 +10,7 @@ A LangChain-powered AI assistant designed specifically for Stevens Institute of 
 - **💼 Workday Integration**: Navigate to registration and financial account pages
 - **👥 Advisor Information**: Retrieve advisor contact details
 - **🤖 LangChain Agents**: Intelligent tool selection based on natural language queries
+- **📊 LangSmith Observability**: Monitor, debug, and improve AI performance
 
 ## 🛠️ Technology Stack
 
@@ -55,9 +56,14 @@ Create a `.env` file in the project root:
 
 ```env
 # Required - OpenAI Configuration
-OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here 
 OPENAI_MODEL=gpt-4-turbo-preview
 MAX_TOKENS=1000
+
+# Optional - LangSmith Observability
+LANGSMITH_API_KEY=your_langsmith_api_key_here  
+LANGSMITH_PROJECT=stevens-ai-assistant
+LANGCHAIN_TRACING_V2=true
 
 # Optional - Canvas Integration
 CANVAS_API_URL=https://sit.instructure.com/api/v1/
@@ -75,6 +81,32 @@ uvicorn main:app --reload
 ```
 
 The API will be available at: `http://127.0.0.1:8000`
+
+## 📊 LangSmith Setup (Recommended)
+
+LangSmith provides powerful observability for your AI assistant, allowing you to:
+- 🔍 **Debug agent decisions** and tool usage
+- 📈 **Monitor performance** and response times  
+- 🐛 **Identify errors** and improve reliability
+- 📊 **Analyze user interactions** and patterns
+
+### Quick LangSmith Setup:
+
+1. **Sign up** at [smith.langchain.com](https://smith.langchain.com)
+2. **Create a new project** called "stevens-ai-assistant"
+3. **Get your API key** from the settings
+4. **Add to your `.env`**:
+   ```env
+   LANGSMITH_API_KEY=your_langsmith_api_key_here
+   LANGSMITH_PROJECT=stevens-ai-assistant
+   LANGCHAIN_TRACING_V2=true
+   ```
+5. **Restart your application** - tracing will automatically begin!
+
+### View Your Traces:
+- Visit [smith.langchain.com](https://smith.langchain.com)
+- Select your "stevens-ai-assistant" project  
+- See real-time agent executions, tool calls, and performance metrics
 
 ## 🔧 Docker Setup (Alternative)
 
@@ -221,6 +253,9 @@ The LangChain agent will automatically have access to your new tool!
 | `OPENAI_API_KEY` | ✅ | OpenAI API key for GPT-4 |
 | `OPENAI_MODEL` | ❌ | Model name (default: gpt-4-turbo-preview) |
 | `MAX_TOKENS` | ❌ | Max response tokens (default: 1000) |
+| `LANGSMITH_API_KEY` | ❌ | LangSmith API key for tracing and monitoring |
+| `LANGSMITH_PROJECT` | ❌ | LangSmith project name (default: stevens-ai-assistant) |
+| `LANGCHAIN_TRACING_V2` | ❌ | Enable LangSmith tracing (default: true) |
 | `CANVAS_API_KEY` | ❌ | Canvas API key for course data |
 | `CANVAS_API_URL` | ❌ | Canvas API URL |
 | `WORKDAY_USERNAME` | ❌ | Stevens username for Workday |

@@ -10,6 +10,12 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = "gpt-4-turbo-preview"
     MAX_TOKENS: int = 1000
 
+    # LangSmith Configuration
+    LANGCHAIN_TRACING_V2: str = "true"
+    LANGSMITH_API_KEY: Optional[str] = None
+    LANGSMITH_PROJECT: str = "stevens-ai-assistant"
+    LANGSMITH_ENDPOINT: str = "https://api.smith.langchain.com"
+
     VECTOR_DB_PATH: str = "vector_db"
 
     CANVAS_API_URL: Optional[str] = "https://stevens.instructure.com/api/v1"

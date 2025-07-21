@@ -5,6 +5,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.tracers import ConsoleCallbackHandler
 from pydantic import BaseModel
 from app.services.user_functions import all_tools
 from app.core.config import settings
@@ -50,7 +51,16 @@ Include encouraging words for the student when appropriate."""),
         
         # Create the agent
         self.agent = create_openai_tools_agent(self.llm, self.tools, self.prompt)
-        self.agent_executor = AgentExecutor(agent=self.agent, tools=self.tools, verbose=True)
+        
+        # Configure agent executor with LangSmith tracing
+        self.agent_executor = AgentExecutor(
+            agent=self.agent, 
+            tools=self.tools, 
+            verbose=True,
+            return_intermediate_steps=True,  # Enable step tracking
+            max_iterations=5,  # Prevent infinite loops
+            early_stopping_method="generate"  # Stop when final answer is generated
+        )
 
     async def get_completion(self,
                              messages: List[Dict[str, str]],
@@ -86,8 +96,18 @@ Include encouraging words for the student when appropriate."""),
             }
             logger.info(f"[DEBUG] Passing to agent: input='{user_input}', chat_history={len(chat_history)} messages")
             
-            # Run the agent
-            result = await self.agent_executor.ainvoke(agent_input)
+            # Run the agent with metadata for LangSmith tracing
+            result = await self.agent_executor.ainvoke(
+                agent_input,
+                config={
+                    "tags": ["stevens-ai-assistant", "chat-endpoint"],
+                    "metadata": {
+                        "user_input_length": len(user_input),
+                        "chat_history_length": len(chat_history),
+                        "session_type": "chat"
+                    }
+                }
+            )
             
             return {
                 "content": result["output"],

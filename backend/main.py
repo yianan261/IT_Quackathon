@@ -18,6 +18,16 @@ load_dotenv(env_path)
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
+
+# Configure LangSmith tracing after settings import
+if settings.LANGSMITH_API_KEY:
+    os.environ["LANGCHAIN_TRACING_V2"] = settings.LANGCHAIN_TRACING_V2
+    os.environ["LANGSMITH_API_KEY"] = settings.LANGSMITH_API_KEY
+    os.environ["LANGSMITH_PROJECT"] = settings.LANGSMITH_PROJECT
+    os.environ["LANGSMITH_ENDPOINT"] = settings.LANGSMITH_ENDPOINT
+    logger.info("✅ LangSmith tracing enabled")
+else:
+    logger.info("⚠️ LangSmith API key not found - tracing disabled")
 from contextlib import asynccontextmanager
 from app.api import chat, workday
 
