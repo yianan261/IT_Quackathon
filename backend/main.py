@@ -11,9 +11,31 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# Load .env from parent directory
-env_path = pathlib.Path(__file__).parent.parent / '.env'
-load_dotenv(env_path)
+# Load .env file with multiple fallback paths
+def load_environment():
+    """Load environment variables from .env file with multiple fallback paths"""
+    possible_env_paths = [
+        # Current directory (if running from project root)
+        pathlib.Path.cwd() / '.env',
+        # Parent of backend directory (normal case)
+        pathlib.Path(__file__).parent.parent / '.env',
+        # Grandparent (if running from deeper nested directory)
+        pathlib.Path(__file__).parent.parent.parent / '.env',
+        # Explicit project root (when debugging)
+        pathlib.Path(__file__).parent.parent / '.env',
+    ]
+    
+    for env_path in possible_env_paths:
+        if env_path.exists():
+            logger.info(f"📄 Loading .env from: {env_path}")
+            load_dotenv(env_path)
+            return env_path
+    
+    logger.warning("⚠️ No .env file found. Using system environment variables only.")
+    return None
+
+# Load environment variables
+loaded_env_path = load_environment()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

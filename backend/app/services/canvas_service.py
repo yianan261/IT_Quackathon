@@ -38,7 +38,8 @@ class CanvasService:
             response = requests.get(
                 f"{self.base_url}/courses",
                 headers=self.headers,
-                params={"enrollment_state": "active"},
+                # params={"enrollment_state": "active"},
+                params={"enrollment_state": "completed"},
             )
             logger.info(f"Courses API Response Status: {response.status_code}")
             logger.info(f"Courses API Response: {response.text}")
@@ -121,12 +122,15 @@ class CanvasService:
             course_infos = []
             # The course parameter can be a string, int, or a list of course dicts
             if isinstance(course, str):
-                course_infos = self.extract_course_identifier(course)
-                logger.info(f"======Course info: {course_infos}=======")
-                if not course_infos:
+                course_info = self.extract_course_identifier(course)
+                print(f"======Course info: {course_info}=======")
+                logger.info(f"======Course info: {course_info}=======")
+                if not course_info:
                     logger.warning(
                         f"No course ID found for identifier: {course}")
                     return {"courses": []}
+                # 🔧 FIX: Wrap single dictionary in list
+                course_infos = [course_info]
             elif isinstance(course, list):
                 course_infos = course
             else:
@@ -142,60 +146,81 @@ class CanvasService:
             local_tz = get_localzone()
             all_courses_assignments = []
             for course_info in course_infos:
-                course_id = course_info["id"]
-                logger.info(
-                    f"======Processing assignments for course {course_info['name']} with ID {course_id}===="
-                )
-                url = f"{self.base_url}/courses/{course_id}/assignments"
-                logger.info(f"Fetching assignments from: {url}")
-                response = requests.get(url,
-                                        headers=self.headers,
-                                        params={"include[]": ["submission"]})
-                if response.status_code != 200:
-                    logger.error(
-                        f"Error response for assignments: {response.text}")
+                try:
+                    # Add validation
+                    if not course_info or not isinstance(course_info, dict):
+                        logger.warning(f"Skipping invalid course_info: {course_info}")
+                        continue
+                    
+                    # Safe field extraction
+                    extracted_course_id = course_info.get("id")
+                    extracted_course_name = course_info.get("name", "Unknown Course")
+                    
+                    if not extracted_course_id:
+                        logger.warning(f"Course missing ID, skipping: {course_info}")
+                        continue
+                    
+                    logger.info(f"======Processing assignments for course '{extracted_course_name}' with ID {extracted_course_id}====")
+                    
+                    url = f"{self.base_url}/courses/{extracted_course_id}/assignments"
+                    logger.info(f"Fetching assignments from: {url}")
+                    # response = requests.get(url,
+                    #                         headers=self.headers,
+                    #                         params={"include[]": ["submission"]})
+                    # edit for presentation purposes
+                    response = requests.get(url,
+                                            headers=self.headers,
+                                            params={"include[]": ["all_dates"]})
+                    if response.status_code != 200:
+                        logger.error(
+                            f"Error response for assignments: {response.text}")
+                        continue
+                    assignments = response.json()
+                    logger.info(f"Retrieved {len(assignments)} total assignments")
+                    # now = datetime.now(timezone.utc)
+                    # for presentation purposes
+                    now = datetime(2025, 2, 1, tzinfo=timezone.utc)
+                    # Get assignments due in the next 2 weeks
+                    two_weeks_from_now = now + timedelta(weeks=2)
+                    upcoming_assignments = []
+                    for assignment in assignments:
+                        due_at = assignment.get("due_at")
+                        if due_at:
+                            try:
+                                due_date_utc = datetime.fromisoformat(
+                                    due_at.replace("Z", "+00:00"))
+                                # Convert to local timezone
+                                due_date_local = due_date_utc.astimezone(local_tz)
+                                if now <= due_date_utc <= two_weeks_from_now:
+                                    assignment_info = {
+                                        "name":
+                                        assignment.get("name"),
+                                        "due_at":
+                                        due_date_local.isoformat(),
+                                        "points_possible":
+                                        assignment.get("points_possible"),
+                                        "html_url":
+                                        assignment.get("html_url"),
+                                        "description":
+                                        assignment.get("description"),
+                                    }
+                                    logger.info(
+                                        f"Found upcoming assignment: {assignment_info['name']} due at {due_date_local}"
+                                    )
+                                    upcoming_assignments.append(assignment_info)
+                            except ValueError as e:
+                                logger.error(
+                                    f"Error parsing date {due_at}: {str(e)}")
+                    upcoming_assignments.sort(key=lambda x: x["due_at"])
+                    all_courses_assignments.append({
+                        "course_name":
+                        extracted_course_name,
+                        "assignments":
+                        upcoming_assignments,
+                    })
+                except Exception as e:
+                    logger.error(f"Error processing course {course_info}: {str(e)}")
                     continue
-                assignments = response.json()
-                logger.info(f"Retrieved {len(assignments)} total assignments")
-                now = datetime.now(timezone.utc)
-                # Get assignments due in the next 2 weeks
-                two_weeks_from_now = now + timedelta(weeks=2)
-                upcoming_assignments = []
-                for assignment in assignments:
-                    due_at = assignment.get("due_at")
-                    if due_at:
-                        try:
-                            due_date_utc = datetime.fromisoformat(
-                                due_at.replace("Z", "+00:00"))
-                            # Convert to local timezone
-                            due_date_local = due_date_utc.astimezone(local_tz)
-                            if now <= due_date_utc <= two_weeks_from_now:
-                                assignment_info = {
-                                    "name":
-                                    assignment.get("name"),
-                                    "due_at":
-                                    due_date_local.isoformat(),
-                                    "points_possible":
-                                    assignment.get("points_possible"),
-                                    "html_url":
-                                    assignment.get("html_url"),
-                                    "description":
-                                    assignment.get("description"),
-                                }
-                                logger.info(
-                                    f"Found upcoming assignment: {assignment_info['name']} due at {due_date_local}"
-                                )
-                                upcoming_assignments.append(assignment_info)
-                        except ValueError as e:
-                            logger.error(
-                                f"Error parsing date {due_at}: {str(e)}")
-                upcoming_assignments.sort(key=lambda x: x["due_at"])
-                all_courses_assignments.append({
-                    "course_name":
-                    course_info["name"],
-                    "assignments":
-                    upcoming_assignments,
-                })
             logger.info(
                 f"Retrieved assignments for {len(all_courses_assignments)} courses"
             )
@@ -236,7 +261,7 @@ class CanvasService:
         Parameters:
             course (Union[int, str, List[Dict]]):
                 - If an integer, represents a single course ID;
-                - If a string, represents a course name or keyword (will be parsed via _extract_course_identifier);
+                - If a string, represents a course name or keyword (will be parsed via extract_course_identifier);
                 - If a list, it should be a list of course dictionaries (each must contain at least "id" and "name").
 
         Returns:
@@ -251,14 +276,16 @@ class CanvasService:
             # Determine the course list based on the input parameter type
             course_infos = []
             if isinstance(course, str):
-                course_infos = self.extract_course_identifier(course)
+                course_info = self.extract_course_identifier(course)
                 logger.info(
-                    f"Extracted course info from query '{course}': {course_infos}"
+                    f"Extracted course info from query '{course}': {course_info}"
                 )
-                if not course_infos:
+                if not course_info:
                     logger.warning(
                         f"No course ID found for identifier: {course}")
                     return {"courses": []}
+                # 🔧 FIX: Wrap single dictionary in list
+                course_infos = [course_info]
             elif isinstance(course, list):
                 course_infos = course
             else:  # assume integer course id
@@ -383,7 +410,7 @@ class CanvasService:
         Parameters:
             course (Union[int, str, List[Dict]]):
                 - If an integer, represents a single course ID;
-                - If a string, represents a course name or keyword (will be parsed via _extract_course_identifier);
+                - If a string, represents a course name or keyword (will be parsed via extract_course_identifier);
                 - If a list, it should be a list of course dictionaries (each must contain at least "id" and "name").
                 
         Returns:
@@ -393,209 +420,16 @@ class CanvasService:
             # Determine the course list based on the input parameter type
             course_infos = []
             if isinstance(course, str):
-                course_infos = self._extract_course_identifier(course)
+                course_info = self.extract_course_identifier(course)
                 logger.info(
-                    f"Extracted course info from query '{course}': {course_infos}"
+                    f"Extracted course info from query '{course}': {course_info}"
                 )
-                if not course_infos:
+                if not course_info:
                     logger.warning(
                         f"No course ID found for identifier: {course}")
                     return {"courses": []}
-            elif isinstance(course, list):
-                course_infos = course
-            else:  # assume integer course id
-                courses = self.get_current_courses()
-                course_info = next((c for c in courses if c["id"] == course),
-                                   None)
-                if course_info:
-                    course_infos = [{
-                        "id": course,
-                        "name": course_info["name"]
-                    }]
-                else:
-                    logger.warning(f"No course found with ID: {course}")
-                    return {"courses": []}
-
-            results = []
-            # Iterate over each course and get grades
-            for course_info in course_infos:
-                course_id = course_info["id"]
-                course_name = course_info["name"]
-
-                # First get all assignments for the course
-                assignments_url = f"{self.base_url}/courses/{course_id}/assignments"
-                logger.info(
-                    f"Fetching assignments for course {course_name} (ID: {course_id}) from: {assignments_url}"
-                )
-                assignments_response = requests.get(assignments_url,
-                                                    headers=self.headers)
-
-                if assignments_response.status_code != 200:
-                    logger.error(
-                        f"Error response for assignments (course {course_id}): {assignments_response.text}"
-                    )
-                    continue
-
-                assignments = assignments_response.json()
-
-                # Now get the submissions for these assignments
-                submissions_url = f"{self.base_url}/courses/{course_id}/students/submissions"
-                params = {
-                    "student_ids[]":
-                    "self",  # get submissions for the current user
-                    "include[]": [
-                        "assignment", "submission_comments",
-                        "rubric_assessment", "score", "user"
-                    ]
-                }
-
-                logger.info(
-                    f"Fetching submissions for course {course_name} (ID: {course_id}) from: {submissions_url}"
-                )
-                submissions_response = requests.get(submissions_url,
-                                                    headers=self.headers,
-                                                    params=params)
-
-                if submissions_response.status_code != 200:
-                    logger.error(
-                        f"Error response for submissions (course {course_id}): {submissions_response.text}"
-                    )
-                    continue
-
-                submissions = submissions_response.json()
-
-                # Get course total grade
-                enrollment_url = f"{self.base_url}/courses/{course_id}/enrollments"
-                params = {"user_id": "self"}
-
-                logger.info(
-                    f"Fetching enrollment/grade data for course {course_name} (ID: {course_id}) from: {enrollment_url}"
-                )
-                enrollment_response = requests.get(enrollment_url,
-                                                   headers=self.headers,
-                                                   params=params)
-
-                course_grade = None
-                if enrollment_response.status_code == 200:
-                    enrollments = enrollment_response.json()
-                    if enrollments and len(enrollments) > 0:
-                        for enrollment in enrollments:
-                            if enrollment.get("type") == "StudentEnrollment":
-                                course_grade = {
-                                    "current_grade":
-                                    enrollment.get("grades",
-                                                   {}).get("current_grade"),
-                                    "current_score":
-                                    enrollment.get("grades",
-                                                   {}).get("current_score"),
-                                    "final_grade":
-                                    enrollment.get("grades",
-                                                   {}).get("final_grade"),
-                                    "final_score":
-                                    enrollment.get("grades",
-                                                   {}).get("final_score")
-                                }
-                                break
-
-                # Process submissions data
-                processed_submissions = []
-                for submission in submissions:
-                    assignment_id = submission.get("assignment_id")
-                    assignment = next(
-                        (a for a in assignments if a["id"] == assignment_id),
-                        None)
-
-                    if assignment:
-                        processed_submissions.append({
-                            "assignment_name":
-                            assignment.get("name", "Unknown Assignment"),
-                            "assignment_id":
-                            assignment_id,
-                            "score":
-                            submission.get("score"),
-                            "grade":
-                            submission.get("grade"),
-                            "points_possible":
-                            assignment.get("points_possible"),
-                            "submitted_at":
-                            submission.get("submitted_at"),
-                            "late":
-                            submission.get("late", False),
-                            "missing":
-                            submission.get("missing", False),
-                            "submission_type":
-                            submission.get("submission_type"),
-                            "submission_url":
-                            submission.get("html_url"),
-                            "assignment_url":
-                            assignment.get("html_url")
-                        })
-
-                results.append({
-                    "course_name": course_name,
-                    "course_id": course_id,
-                    "course_grade": course_grade,
-                    "grades_url":
-                    f"https://sit.instructure.com/courses/{course_id}/grades",
-                    "submissions": processed_submissions
-                })
-
-            return {"courses": results}
-        except Exception as e:
-            logger.error(
-                f"Error fetching grades for course {course}: {str(e)}",
-                exc_info=True)
-            return {"courses": []}
-
-    def get_grades_for_all_courses(self) -> Dict:
-        """
-        Get grades for all current courses.
-        
-        This function retrieves all current courses via get_current_courses,
-        then calls get_grades_for_course with the list of courses to get
-        grades for each course.
-        
-        Returns:
-            Dict: In the format {"courses": [ { "course_name": ..., "grades": {...} }, ... ] }
-        """
-        try:
-            all_courses = self.get_current_courses()
-            course_infos = [{
-                "id": course["id"],
-                "name": course["name"]
-            } for course in all_courses]
-            grades = self.get_grades_for_course(course_infos)
-            return grades
-        except Exception as e:
-            logger.error(f"Error fetching grades for all courses: {str(e)}")
-            return {"courses": []}
-
-    def get_grades_for_course(self, course: Union[int, str,
-                                                  List[Dict]]) -> Dict:
-        """
-        Get grades for a specific course or courses.
-        
-        Parameters:
-            course (Union[int, str, List[Dict]]):
-                - If an integer, represents a single course ID;
-                - If a string, represents a course name or keyword (will be parsed via _extract_course_identifier);
-                - If a list, it should be a list of course dictionaries (each must contain at least "id" and "name").
-                
-        Returns:
-            Dict: In the format {"courses": [ { "course_name": ..., "grades": {...} }, ... ] }
-        """
-        try:
-            # Determine the course list based on the input parameter type
-            course_infos = []
-            if isinstance(course, str):
-                course_infos = self._extract_course_identifier(course)
-                logger.info(
-                    f"Extracted course info from query '{course}': {course_infos}"
-                )
-                if not course_infos:
-                    logger.warning(
-                        f"No course ID found for identifier: {course}")
-                    return {"courses": []}
+                # 🔧 FIX: Wrap single dictionary in list
+                course_infos = [course_info]
             elif isinstance(course, list):
                 course_infos = course
             else:  # assume integer course id

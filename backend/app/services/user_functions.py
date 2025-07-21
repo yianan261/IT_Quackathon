@@ -257,7 +257,7 @@ def navigate_to_workday_registration(mock_mode: bool = False, stay_open: bool = 
 
 
 @tool
-def navigate_to_workday_financial_account(mock_mode: bool = False, stay_open: bool = False) -> str:
+def navigate_to_workday_financial_account(mock_mode: bool = False, stay_open: bool = True) -> str:
     """
     Navigate to the financial account page in Workday.
     This will open a browser and prompt you to enter your credentials if not already logged in.
