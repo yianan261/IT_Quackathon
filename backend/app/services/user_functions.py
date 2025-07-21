@@ -5,12 +5,23 @@ from threading import Thread
 from langchain_core.tools import tool
 from app.services.canvas_service import CanvasService
 from app.services.stevens_service import StevensService
+from app.services.rag_service import RAGService
 from playwright.async_api import async_playwright
 from app.services.workday_service import WorkdayService
+from app.core.config import settings
 
 # Create singleton instances
 _canvas_service = CanvasService()
 _stevens_service = StevensService()
+
+# Initialize RAG service if enabled
+_rag_service: Optional[RAGService] = None
+if settings.RAG_ENABLED:
+    try:
+        _rag_service = RAGService()
+    except Exception as e:
+        print(f"[WARNING] Failed to initialize RAG service: {e}")
+        _rag_service = None
 
 _workday_service: Optional[WorkdayService] = None
 
@@ -341,6 +352,157 @@ def shutdown_workday_browser() -> str:
     return run_async_tool(_shutdown())
 
 
+# RAG (Retrieval-Augmented Generation) Tools
+@tool
+def search_stevens_knowledge(query: str) -> str:
+    """
+    Search the Stevens Institute knowledge base for relevant information.
+    This tool retrieves information from official Stevens documents, policies,
+    academic information, and institutional knowledge.
+    
+    Args:
+        query: The search query (e.g., "computer science requirements", "academic calendar", "tuition costs")
+        
+    Returns:
+        str: A JSON string containing relevant information from the knowledge base.
+    """
+    if not _rag_service:
+        return json.dumps({
+            "success": False,
+            "error": "RAG service not available",
+            "message": "Knowledge base search is currently unavailable."
+        })
+    
+    try:
+        # Search for relevant documents
+        results = _rag_service.search_similar(query, top_k=3)
+        
+        if not results:
+            return json.dumps({
+                "success": True,
+                "results": [],
+                "message": f"No relevant information found for '{query}'. Try rephrasing your question."
+            })
+        
+        # Format results
+        formatted_results = []
+        for result in results:
+            formatted_results.append({
+                "content": result["content"].strip(),
+                "source": result["metadata"].get("source", "unknown"),
+                "category": result["metadata"].get("category", "general"),
+                "relevance_score": round(1 - result["score"], 3)  # Convert distance to relevance
+            })
+        
+        return json.dumps({
+            "success": True,
+            "query": query,
+            "results": formatted_results,
+            "message": f"Found {len(formatted_results)} relevant documents about '{query}'"
+        })
+        
+    except Exception as e:
+        return json.dumps({
+            "success": False,
+            "error": str(e),
+            "message": "Error searching knowledge base."
+        })
+
+
+@tool
+def get_stevens_info(topic: str) -> str:
+    """
+    Get specific information about Stevens Institute topics like academic programs,
+    policies, deadlines, requirements, or general institutional information.
+    
+    Args:
+        topic: The specific topic to search for (e.g., "CS program requirements", 
+               "academic calendar", "registration deadlines", "faculty contacts")
+               
+    Returns:
+        str: A JSON string containing detailed information about the topic.
+    """
+    if not _rag_service:
+        return json.dumps({
+            "success": False,
+            "error": "Knowledge base not available"
+        })
+    
+    try:
+        # Search for relevant documents
+        docs = _rag_service.retrieve_documents(topic, top_k=5)
+        
+        if not docs:
+            return json.dumps({
+                "success": True,
+                "topic": topic,
+                "information": "No specific information found about this topic.",
+                "suggestion": "Try asking about general topics like 'academic calendar', 'course requirements', or 'student services'."
+            })
+        
+        # Combine and format the information
+        combined_info = []
+        sources = set()
+        
+        for doc in docs:
+            content = doc.page_content.strip()
+            source = doc.metadata.get("source", "Stevens Information")
+            category = doc.metadata.get("category", "general")
+            
+            if content and len(content) > 50:  # Filter out very short chunks
+                combined_info.append({
+                    "content": content,
+                    "source": source,
+                    "category": category
+                })
+                sources.add(source)
+        
+        return json.dumps({
+            "success": True,
+            "topic": topic,
+            "information": combined_info[:3],  # Limit to top 3 results
+            "sources": list(sources),
+            "message": f"Found detailed information about '{topic}' from {len(sources)} sources."
+        })
+        
+    except Exception as e:
+        return json.dumps({
+            "success": False,
+            "error": str(e),
+            "topic": topic
+        })
+
+
+@tool
+def get_rag_stats() -> str:
+    """
+    Get statistics about the knowledge base including number of documents,
+    embedding model used, and other configuration details.
+    
+    Returns:
+        str: A JSON string containing knowledge base statistics.
+    """
+    if not _rag_service:
+        return json.dumps({
+            "success": False,
+            "error": "RAG service not available"
+        })
+    
+    try:
+        stats = _rag_service.get_collection_stats()
+        return json.dumps({
+            "success": True,
+            "stats": stats,
+            "message": f"Knowledge base contains {stats.get('total_documents', 0)} documents."
+        })
+        
+    except Exception as e:
+        return json.dumps({
+            "success": False,
+            "error": str(e)
+        })
+
+
 # Export all tools
 all_tools = [
     get_current_courses,
@@ -356,4 +518,8 @@ all_tools = [
     navigate_to_workday_financial_account,
     get_advisors_info,
     shutdown_workday_browser,
+    # RAG tools
+    search_stevens_knowledge,
+    get_stevens_info,
+    get_rag_stats,
 ]

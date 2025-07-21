@@ -11,6 +11,7 @@ A LangChain-powered AI assistant designed specifically for Stevens Institute of 
 - **👥 Advisor Information**: Retrieve advisor contact details
 - **🤖 LangChain Agents**: Intelligent tool selection based on natural language queries
 - **📊 LangSmith Observability**: Monitor, debug, and improve AI performance
+- **🔍 RAG Knowledge Base**: Retrieve information from Stevens-specific documents and policies
 
 ## 🛠️ Technology Stack
 
@@ -61,9 +62,17 @@ OPENAI_MODEL=gpt-4-turbo-preview
 MAX_TOKENS=1000
 
 # Optional - LangSmith Observability
-LANGSMITH_API_KEY=your_langsmith_api_key_here  
+LANGSMITH_API_KEY=your_langsmith_api_key_here
 LANGSMITH_PROJECT=stevens-ai-assistant
 LANGCHAIN_TRACING_V2=true
+
+# Optional - RAG Configuration
+RAG_ENABLED=true
+VECTOR_DB_PATH=vector_db
+EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+CHUNK_SIZE=1000
+CHUNK_OVERLAP=200
+RAG_TOP_K=5
 
 # Optional - Canvas Integration
 CANVAS_API_URL=https://sit.instructure.com/api/v1/
@@ -107,6 +116,47 @@ LangSmith provides powerful observability for your AI assistant, allowing you to
 - Visit [smith.langchain.com](https://smith.langchain.com)
 - Select your "stevens-ai-assistant" project  
 - See real-time agent executions, tool calls, and performance metrics
+
+## 🔍 RAG Knowledge Base
+
+The RAG (Retrieval-Augmented Generation) system allows the AI assistant to access a knowledge base of Stevens-specific information including:
+
+### 📚 **Pre-loaded Information:**
+- **Academic Calendar**: Semester dates, deadlines, breaks
+- **Program Requirements**: Course requirements by major
+- **Financial Information**: Tuition, fees, payment deadlines
+- **Student Services**: Campus resources, support services
+- **Faculty Directory**: Department contacts and information
+
+### 🚀 **Features:**
+- **Semantic Search**: Find relevant information using natural language
+- **Document Chunking**: Intelligent text splitting for better retrieval
+- **Metadata Filtering**: Search by category, source, or type
+- **Real-time Retrieval**: Get up-to-date information instantly
+
+### 🛠️ **Adding Your Own Documents:**
+
+```python
+# Example: Add documents to the knowledge base
+from app.services.rag_service import RAGService
+
+rag = RAGService()
+
+# Add documents from a directory
+rag.add_documents_from_directory("path/to/stevens/docs")
+
+# Add individual documents
+from langchain_core.documents import Document
+
+doc = Document(
+    page_content="Your Stevens-specific content here...",
+    metadata={"source": "policy_manual", "category": "academic"}
+)
+rag.add_documents([doc])
+```
+
+### 📊 **Knowledge Base Stats:**
+Ask the AI: *"How many documents are in the knowledge base?"* to see current statistics.
 
 ## 🔧 Docker Setup (Alternative)
 
@@ -167,6 +217,9 @@ The AI assistant automatically uses these tools based on your queries:
 | `get_advisors_info` | Get advisor contacts | "Who is my advisor?" |
 | `get_program_requirements` | Get degree requirements | "CS masters requirements?" |
 | `get_academic_calendar_event` | Get calendar info | "When is spring break?" |
+| `search_stevens_knowledge` | Search knowledge base | "Find information about tuition" |
+| `get_stevens_info` | Get specific Stevens info | "Tell me about CS program requirements" |
+| `get_rag_stats` | Get knowledge base stats | "How many documents are in the knowledge base?" |
 
 ## 📁 Project Structure
 
@@ -213,6 +266,12 @@ IT_Quackathon/
 - "When is finals week?"
 - "Tell me about spring break dates"
 
+### Knowledge Base Queries
+- "Find information about Stevens tuition and fees"
+- "What are the Computer Science course requirements?"
+- "Tell me about Stevens student services"
+- "When is the add/drop deadline?"
+
 ## 🔧 Development
 
 ### Adding New Tools
@@ -256,6 +315,12 @@ The LangChain agent will automatically have access to your new tool!
 | `LANGSMITH_API_KEY` | ❌ | LangSmith API key for tracing and monitoring |
 | `LANGSMITH_PROJECT` | ❌ | LangSmith project name (default: stevens-ai-assistant) |
 | `LANGCHAIN_TRACING_V2` | ❌ | Enable LangSmith tracing (default: true) |
+| `RAG_ENABLED` | ❌ | Enable RAG knowledge base (default: true) |
+| `VECTOR_DB_PATH` | ❌ | Vector database storage path (default: vector_db) |
+| `EMBEDDING_MODEL` | ❌ | Embedding model for RAG (default: sentence-transformers/all-MiniLM-L6-v2) |
+| `CHUNK_SIZE` | ❌ | Text chunk size for RAG (default: 1000) |
+| `CHUNK_OVERLAP` | ❌ | Text chunk overlap (default: 200) |
+| `RAG_TOP_K` | ❌ | Number of docs to retrieve (default: 5) |
 | `CANVAS_API_KEY` | ❌ | Canvas API key for course data |
 | `CANVAS_API_URL` | ❌ | Canvas API URL |
 | `WORKDAY_USERNAME` | ❌ | Stevens username for Workday |

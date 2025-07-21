@@ -16,10 +16,16 @@ class Settings(BaseSettings):
     LANGSMITH_PROJECT: str = "stevens-ai-assistant"
     LANGSMITH_ENDPOINT: str = "https://api.smith.langchain.com"
 
+    # RAG Configuration
+    RAG_ENABLED: bool = True
     VECTOR_DB_PATH: str = "vector_db"
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    CHUNK_SIZE: int = 1000
+    CHUNK_OVERLAP: int = 200
+    RAG_TOP_K: int = 5
 
-    CANVAS_API_URL: Optional[str] = "https://stevens.instructure.com/api/v1"
-    CANVAS_API_KEY: Optional[str] = "1030~2PcFfvh6H9WGCQZyYBRzHCkHG2RFMNXVU4kFzNv2WDVENeMtMwkHuhhFPhfKkVZQ"
+    CANVAS_API_URL: Optional[str] = None
+    CANVAS_API_KEY: Optional[str] = None
 
     # Azure-specific settings (deprecated, no longer used)
     # CONN_STR: str

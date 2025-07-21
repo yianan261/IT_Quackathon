@@ -23,4 +23,11 @@ langchain-core
 langchain-community
 langchain-experimental
 langchain-text-splitters
+langchain-chroma
+langchain-unstructured
+langchain-huggingface
 langsmith
+chromadb
+unstructured[pdf]
+sentence-transformers
+markdown
