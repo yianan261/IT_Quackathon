@@ -31,3 +31,4 @@ chromadb
 unstructured[pdf]
 sentence-transformers
 markdown
+langchain-chroma

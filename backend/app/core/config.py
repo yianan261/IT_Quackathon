@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     CANVAS_API_URL: Optional[str] = None
     CANVAS_API_KEY: Optional[str] = None
 
+    WORKDAY_USERNAME: Optional[str] = None
+    WORKDAY_PASSWORD: Optional[str] = None
+
     # Azure-specific settings (deprecated, no longer used)
     # CONN_STR: str
     # AGENT_ID: str

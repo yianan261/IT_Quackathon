@@ -28,10 +28,41 @@ _workday_service: Optional[WorkdayService] = None
 
 async def get_workday_service() -> WorkdayService:
     global _workday_service
+    
+    # Check if service exists and is healthy
+    if _workday_service is not None:
+        try:
+            # Check if playwright instance is still valid
+            if not _workday_service.playwright:
+                print("[DEBUG] Playwright instance is None, recreating service")
+                _workday_service = None
+            # Test if browser context is still valid
+            elif _workday_service.browser_context and not _workday_service.browser_context.pages is None:
+                if _workday_service.page and not _workday_service.page.is_closed():
+                    print("[DEBUG] Reusing existing WorkdayService")
+                    return _workday_service
+        except Exception as e:
+            print(f"[DEBUG] Existing service unhealthy: {e}, creating new one")
+            # Cleanup old service
+            try:
+                if _workday_service and _workday_service.browser_context:
+                    await _workday_service.close()
+            except:
+                pass
+            _workday_service = None
+    
+    # Create new service if needed
     if _workday_service is None:
-        playwright = await async_playwright().start()
-        _workday_service = WorkdayService(playwright)
-        await _workday_service.start()
+        print("[DEBUG] Creating new WorkdayService")
+        try:
+            playwright = await async_playwright().start()
+            _workday_service = WorkdayService(playwright)
+            await _workday_service.start()
+        except Exception as e:
+            print(f"[ERROR] Failed to create WorkdayService: {e}")
+            _workday_service = None
+            raise
+        
     return _workday_service
 
 
@@ -306,7 +337,15 @@ def get_advisors_info() -> str:
     async def _get_advisors():
         try:
             service = await get_workday_service()
-            advisors = service.get_advisors_list()
+            
+            # First try to get cached advisors
+            advisors = service.get_advisors()
+            
+            # If no cached advisors, fetch them fresh
+            if not advisors:
+                print("[DEBUG] No cached advisors, fetching fresh data...")
+                advisors = await service.get_advisors()
+            
             return json.dumps({
                 "success": True,
                 "advisors": advisors,

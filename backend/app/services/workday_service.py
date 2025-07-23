@@ -77,6 +77,8 @@ class WorkdayService:
                 break
 
     async def login(self):
+        print("======Login called")
+        print(self.page.url)
         html_content = await self.page.content()
         if "Stevens Institute of Technology - Sign In" in html_content:
             print("Login page detected")
@@ -89,25 +91,57 @@ class WorkdayService:
             await self.page.get_by_role("button", name="Sign in").click()
             await self.page.wait_for_url("**/home.htmld", timeout=60_000)
 
+        # Check multiple indicators that we're successfully logged into Workday
+        current_url = self.page.url
         landing_page_html = await self.page.content()
-        if "window.workday" in landing_page_html:
+        
+        # Method 1: Check URL pattern (most reliable)
+        if "myworkday.com" in current_url and "home.htmld" in current_url:
+            print("[DEBUG] Login detected via URL pattern")
             self.logged_in = True
             return True
-        else:
-            return False
+            
+        # Method 2: Check for Workday dashboard elements
+        if "Hi There" in landing_page_html or "Awaiting Your Action" in landing_page_html:
+            print("[DEBUG] Login detected via dashboard content")
+            self.logged_in = True
+            return True
+            
+        # Method 3: Fallback to original check
+        if "window.workday" in landing_page_html:
+            print("[DEBUG] Login detected via window.workday")
+            self.logged_in = True
+            return True
+            
+        print(f"[DEBUG] Login detection failed. Current URL: {current_url}")
+        print(f"[DEBUG] Page title: {await self.page.title()}")
+        return False
 
-    async def navigate_to_workday_registration(self, stay_open: bool = False):
+    async def navigate_to_workday_registration(self, stay_open: bool = True):
         try:
             print("======Navigating to Workday registration page")
-            await self.page.goto("https://www.stevens.edu/it/services/workday")
-            await self.page.click("text=Log in to Workday")
+            await self._navigate_with_retry("https://www.stevens.edu/it/services/workday")
+            
+            # Wait for popup window to open after clicking "Log in to Workday"
+            async with self.browser_context.expect_page() as page_info:
+                await self.page.click("text=Log in to Workday")
+            
+            # Switch to the popup window
+            popup_page = await page_info.value
+            await popup_page.wait_for_load_state('networkidle')
+            
+            print(f"[DEBUG] Original window URL: {self.page.url}")
+            print(f"[DEBUG] Popup window URL: {popup_page.url}")
+            
+            # Update our page reference to the popup
+            self.page = popup_page
             await self.page.wait_for_timeout(2000)
 
             if await self.login():
                 await self.page.wait_for_timeout(3000)
                 await self.page.click("text=Academics", timeout=10_000)
                 if not self.advisors:
-                    await self.get_advisors()
+                    self.advisors = await self.get_advisors_in_workday()
                 await self.page.click("text=Find Course Sections",
                                       timeout=10_000)
 
@@ -191,12 +225,25 @@ class WorkdayService:
             logger.error(f"[navigate_to_workday_registration] Error: {str(e)}")
             return {"success": False, "error": str(e), "html": None}
 
-    async def navigate_to_workday_financial_account(self, stay_open):
+    async def navigate_to_workday_financial_account(self, stay_open: bool = True):
         try:
-            await self.page.goto("https://www.stevens.edu/it/services/workday")
-            await self.page.click("text=Log in to Workday")
+            await self._navigate_with_retry("https://www.stevens.edu/it/services/workday")
+            
+            # Wait for popup window to open after clicking "Log in to Workday"
+            async with self.browser_context.expect_page() as page_info:
+                await self.page.click("text=Log in to Workday")
+            
+            # Switch to the popup window
+            popup_page = await page_info.value
+            await popup_page.wait_for_load_state('networkidle')
+            
+            print(f"[DEBUG] Original window URL: {self.page.url}")
+            print(f"[DEBUG] Popup window URL: {popup_page.url}")
+            
+            # Update our page reference to the popup
+            self.page = popup_page
             await self.page.wait_for_timeout(2000)
-
+            
             if await self.login():
                 # await self.page.click("text=Finances")
                 # await self.page.wait_for_timeout(5000)
@@ -257,10 +304,68 @@ class WorkdayService:
             f"Could not find label '{label}' after {max_scrolls} scrolls")
 
     async def get_advisors(self):
-        # Wait for the specific section to be visible
+        try:
+            print("======Navigating to Workday registration page")
+            await self._navigate_with_retry("https://www.stevens.edu/it/services/workday")
+            
+            # Wait for popup window to open after clicking "Log in to Workday"
+            async with self.browser_context.expect_page() as page_info:
+                await self.page.click("text=Log in to Workday")
+            
+            # Switch to the popup window
+            popup_page = await page_info.value
+            await popup_page.wait_for_load_state('networkidle')
+            
+            print(f"[DEBUG] Original window URL: {self.page.url}")
+            print(f"[DEBUG] Popup window URL: {popup_page.url}")
+            
+            # Update our page reference to the popup
+            self.page = popup_page
+            await self.page.wait_for_timeout(2000)
+
+            if await self.login():
+                await self.page.wait_for_timeout(3000)
+                await self.page.click("text=Academics", timeout=10_000)
+                if not self.advisors:
+                # Wait for the specific section to be visible
+                    await self.page.wait_for_selector(
+                        "[aria-label='Important Contacts Support Network'] table",
+                        timeout=20_000)
+
+                    advisors = await self.page.evaluate("""
+                        () => {
+                            const section = document.querySelector("[aria-label='Important Contacts Support Network']");
+                            if (!section) return [];
+
+                            const rows = section.querySelectorAll("table[data-automation-id='table'] tbody tr");
+
+                            const advisors = Array.from(rows)
+                                .map(row => {
+                                    const cells = row.querySelectorAll("td");
+                                    return {
+                                        role: cells[0]?.innerText.trim(),
+                                        cohort: cells[1]?.innerText.trim(),
+                                        person: cells[3]?.innerText.trim(),
+                                        email: cells[4]?.innerText.trim()
+                                    };
+                                })
+                                .filter(row => row.role?.includes("Advisor"));
+
+                            return advisors;
+                        }
+                    """)
+
+            print("Advisor info:", advisors)
+            self.advisors = advisors
+            return self.advisors
+        except Exception as e:
+            logger.error(f"[get_advisors] Error: {str(e)}")
+            return []
+        
+    async def get_advisors_in_workday(self):
         await self.page.wait_for_selector(
-            "[aria-label='Important Contacts Support Network'] table",
-            timeout=20_000)
+                    "[aria-label='Important Contacts Support Network'] table",
+                    timeout=20_000)
 
         advisors = await self.page.evaluate("""
             () => {
@@ -284,12 +389,104 @@ class WorkdayService:
                 return advisors;
             }
         """)
-
         print("Advisor info:", advisors)
         self.advisors = advisors
-
-    def get_advisors_list(self):
         return self.advisors
+    
+    async def get_advisors_list(self):
+        # if not self.advisors:
+        #     await self.get_advisors()
+        return self.advisors
+
+    async def _ensure_browser_ready(self):
+        """Ensure browser context and page are ready for navigation"""
+        try:
+            # Check if browser context is still valid
+            if not self.browser_context or self.browser_context.pages is None:
+                print("[DEBUG] Browser context is invalid, restarting...")
+                await self._restart_browser()
+                return True
+                
+            # Check if page is still valid
+            if not self.page or self.page.is_closed():
+                print("[DEBUG] Page is closed, creating new page...")
+                self.page = await self.browser_context.new_page()
+                self.page.set_default_timeout(30_000)
+                self.page.set_default_navigation_timeout(60_000)
+                return True
+                
+            # Test if page is responsive
+            try:
+                await self.page.evaluate("() => window.location.href", timeout=5000)
+                print("[DEBUG] Browser is healthy and ready")
+                return True
+            except Exception as e:
+                print(f"[DEBUG] Page unresponsive: {e}, restarting browser...")
+                await self._restart_browser()
+                return True
+                
+        except Exception as e:
+            print(f"[ERROR] Browser health check failed: {e}")
+            await self._restart_browser()
+            return True
+
+    async def _restart_browser(self):
+        """Restart the browser context from scratch"""
+        try:
+            # Close existing browser if it exists
+            if self.browser_context:
+                try:
+                    await self.browser_context.close()
+                except:
+                    pass
+            
+            # Ensure we have a valid playwright instance
+            if not self.playwright:
+                print("[DEBUG] Playwright instance is None, recreating...")
+                from playwright.async_api import async_playwright
+                self.playwright = await async_playwright().start()
+                    
+            # Restart browser context
+            print("[DEBUG] Restarting browser context...")
+            self.browser_context = await self.playwright.chromium.launch_persistent_context(
+                user_data_dir=user_data_dir, headless=False)
+            
+            # Create new page
+            pages = self.browser_context.pages
+            if pages and len(pages) > 0:
+                self.page = pages[0]
+            else:
+                self.page = await self.browser_context.new_page()
+
+            self.page.set_default_timeout(30_000)
+            self.page.set_default_navigation_timeout(60_000)
+            
+            # Reset login state
+            self.logged_in = False
+            
+            print("[DEBUG] Browser restarted successfully")
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to restart browser: {e}")
+            raise
+
+    async def _navigate_with_retry(self, url: str, max_retries: int = 3):
+        """Navigate to URL with retry logic"""
+        for attempt in range(max_retries):
+            try:
+                await self._ensure_browser_ready()
+                await self.page.goto(url, wait_until='networkidle', timeout=30000)
+                print(f"[DEBUG] Successfully navigated to {url}")
+                return True
+            except Exception as e:
+                print(f"[DEBUG] Navigation attempt {attempt + 1} failed: {e}")
+                if attempt < max_retries - 1:
+                    print(f"[DEBUG] Retrying navigation...")
+                    await asyncio.sleep(2)
+                else:
+                    print(f"[ERROR] All navigation attempts failed")
+                    raise
+        return False
 
 
 # if __name__ == "__main__":
