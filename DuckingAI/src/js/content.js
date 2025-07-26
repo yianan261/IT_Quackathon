@@ -49,6 +49,14 @@ class ChatBot {
             <div class="bot-avatar" style="background-color: #8B0000; color: white; display: flex; justify-content: center; align-items: center;">S</div>
             <div class="message-content">
               <p>Hi, I'm your Stevens AI Assistant! I'm here to help answer your questions about Stevens Institute of Technology.</p>
+              <div class="suggestions-section">
+                <p class="suggestions-title">💡 Try asking:</p>
+                <div class="suggestions-grid">
+                  <button class="suggestion-btn" data-suggestion="Give me upcoming assignments">📝 Give me upcoming assignments</button>
+                  <button class="suggestion-btn" data-suggestion="Show me my current courses">📚 Show me my current courses</button>
+                  <button class="suggestion-btn" data-suggestion="Help me register for courses">🎓 Help me register for courses</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -95,6 +103,15 @@ class ChatBot {
         sendMessage();
       }
     });
+
+    // Event delegation for suggestion buttons (they're added dynamically)
+    const messagesContainer = document.querySelector('.chat-messages');
+    messagesContainer.addEventListener('click', (e) => {
+      if (e.target.classList.contains('suggestion-btn')) {
+        const suggestion = e.target.getAttribute('data-suggestion');
+        this.handleSuggestionClick(suggestion);
+      }
+    });
   }
 
   toggleChat() {
@@ -137,7 +154,7 @@ class ChatBot {
 
   // Helper method: Render assignment cards for structured assignment data
   renderAssignmentCards(structuredResponse) {
-    const { data, message } = structuredResponse;
+    const { data, message, suggestions } = structuredResponse;
     const { courses, summary } = data;
     
     // Build the summary header
@@ -195,6 +212,23 @@ class ChatBot {
       `;
     });
     
+    // Build suggestions buttons if available
+    let suggestionsHtml = '';
+    if (suggestions && suggestions.length > 0) {
+      const suggestionButtons = suggestions.map((suggestion, index) => 
+        `<button class="suggestion-btn" data-suggestion="${this.escapeHtml(suggestion)}" data-index="${index}">${this.escapeHtml(suggestion)}</button>`
+      ).join('');
+      
+      suggestionsHtml = `
+        <div class="suggestions-section">
+          <p class="suggestions-title">💡 Try asking:</p>
+          <div class="suggestions-grid">
+            ${suggestionButtons}
+          </div>
+        </div>
+      `;
+    }
+    
     // Return the complete message HTML
     return `
       <div class="message bot">
@@ -204,6 +238,7 @@ class ChatBot {
             <p class="response-message">${this.escapeHtml(message)}</p>
             ${summaryHtml}
             ${coursesHtml}
+            ${suggestionsHtml}
           </div>
         </div>
       </div>
@@ -222,6 +257,26 @@ class ChatBot {
         </div>
       </div>
     `;
+  }
+
+  // Handle suggestion button clicks
+  handleSuggestionClick(suggestion) {
+    console.log('🔧 Suggestion clicked:', suggestion);
+    const input = document.querySelector('.chat-input input');
+    
+    if (input) {
+      // First, show the suggestion in the input field
+      input.value = suggestion;
+      console.log('✅ Input value set:', input.value);
+      
+      // Give a small delay to show the text, then send
+      setTimeout(() => {
+        this.sendMessage(suggestion);
+        input.value = ''; // Clear input after sending
+      }, 100);
+    } else {
+      console.error('❌ Input field not found!');
+    }
   }
   
   async sendMessage(message) {
@@ -242,7 +297,7 @@ class ChatBot {
       <div class="message bot loading">
         <div class="bot-avatar" style="background-color: #8B0000; color: white; display: flex; justify-content: center; align-items: center;">S</div>
         <div class="message-content">
-          <p>Typing...</p>
+          <p>Thinking...</p>
         </div>
       </div>
     `;
@@ -341,4 +396,4 @@ class ChatBot {
 }
 
 // 初始化聊天机器人，在所有页面上显示
-new ChatBot(); 
+window.chatBot = new ChatBot(); 

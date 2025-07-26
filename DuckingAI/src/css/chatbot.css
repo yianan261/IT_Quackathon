@@ -230,11 +230,11 @@
 }
 
 .assignment-summary {
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-  border-radius: 8px;
+  background: #f8f9fa;
+  border-radius: 6px;
   padding: 12px;
   margin-bottom: 15px;
-  border-left: 4px solid #8B0000;
+  border-left: 3px solid #8B0000;
 }
 
 .summary-stats {
@@ -246,20 +246,22 @@
 .stat-item {
   background: white;
   padding: 4px 8px;
-  border-radius: 12px;
+  border-radius: 8px;
   font-size: 12px;
   font-weight: 500;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  border: 1px solid #e9ecef;
 }
 
 .stat-item.high-priority {
-  background: #fee;
-  color: #dc3545;
+  background: #fdf8f8;
+  color: #8B0000;
+  border-color: #8B0000;
 }
 
 .stat-item.medium-priority {
-  background: #fff3cd;
-  color: #856404;
+  background: #fffcf5;
+  color: #d4860b;
+  border-color: #d4860b;
 }
 
 .course-section {
@@ -268,46 +270,46 @@
 
 .course-title {
   color: #8B0000;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
-  margin-bottom: 10px;
-  padding-bottom: 5px;
-  border-bottom: 2px solid #8B0000;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #8B0000;
 }
 
 .assignments-grid {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
 .assignment-card {
-  background: white;
-  border-radius: 8px;
+  background: #fafafa;
+  border-radius: 6px;
   padding: 12px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  border-left: 4px solid #ddd;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: 1px solid #e9ecef;
+  border-left: 3px solid #ddd;
+  transition: border-left-color 0.2s ease;
+  margin-bottom: 8px;
 }
 
 .assignment-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  border-left-color: #8B0000;
 }
 
 .assignment-card.priority-high {
-  border-left-color: #dc3545;
-  background: linear-gradient(135deg, #fff 0%, #fef7f7 100%);
+  border-left-color: #8B0000;
+  background: #fdf8f8;
 }
 
 .assignment-card.priority-medium {
-  border-left-color: #ffc107;
-  background: linear-gradient(135deg, #fff 0%, #fffdf0 100%);
+  border-left-color: #d4860b;
+  background: #fffcf5;
 }
 
 .assignment-card.priority-low {
-  border-left-color: #28a745;
-  background: linear-gradient(135deg, #fff 0%, #f7fef7 100%);
+  border-left-color: #6c757d;
+  background: #f8f9fa;
 }
 
 .assignment-header {
@@ -326,10 +328,10 @@
 }
 
 .priority-badge {
-  background: #f8f9fa;
-  color: #666;
+  background: #e9ecef;
+  color: #6c757d;
   padding: 2px 6px;
-  border-radius: 10px;
+  border-radius: 8px;
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
@@ -337,17 +339,17 @@
 }
 
 .priority-badge.priority-high {
-  background: #dc3545;
+  background: #8B0000;
   color: white;
 }
 
 .priority-badge.priority-medium {
-  background: #ffc107;
-  color: #333;
+  background: #d4860b;
+  color: white;
 }
 
 .priority-badge.priority-low {
-  background: #28a745;
+  background: #6c757d;
   color: white;
 }
 
@@ -373,19 +375,68 @@
 }
 
 .btn-primary {
-  background: #8B0000;
-  color: white;
+  background: transparent;
+  color: #8B0000;
   padding: 4px 8px;
+  border: 1px solid #8B0000;
   border-radius: 4px;
   text-decoration: none;
   font-size: 11px;
   font-weight: 500;
-  transition: background-color 0.2s ease;
+  transition: all 0.2s ease;
   display: inline-block;
 }
 
 .btn-primary:hover {
-  background: #6d0000;
-  text-decoration: none;
+  background: #8B0000;
   color: white;
+  text-decoration: none;
+}
+
+/* Suggestions Section Styling */
+.suggestions-section {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #eee;
+}
+
+.suggestions-title {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.suggestions-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.suggestion-btn {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border: 1px solid #dee2e6;
+  color: #495057;
+  padding: 8px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  width: 100%;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.suggestion-btn:hover {
+  background: linear-gradient(135deg, #8B0000 0%, #a00000 100%);
+  color: white;
+  border-color: #8B0000;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(139,0,0,0.2);
+}
+
+.suggestion-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(139,0,0,0.2);
 }

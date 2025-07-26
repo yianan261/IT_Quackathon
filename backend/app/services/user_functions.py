@@ -245,9 +245,9 @@ def get_upcoming_courses_assignments() -> str:
         },
         "ui_component": "AssignmentTimeline",
         "suggestions": [
-            "Show me details for a specific assignment",
-            "What's due today?",
-            "Help me prioritize my assignments"
+            "Take me to course registration page",
+            "Get my grades",
+            "Can you provide me details about cs 549?"
         ]
     }
     
