@@ -134,6 +134,95 @@ class ChatBot {
       return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
     });
   }
+
+  // Helper method: Render assignment cards for structured assignment data
+  renderAssignmentCards(structuredResponse) {
+    const { data, message } = structuredResponse;
+    const { courses, summary } = data;
+    
+    // Build the summary header
+    let summaryHtml = '';
+    if (summary) {
+      summaryHtml = `
+        <div class="assignment-summary">
+          <div class="summary-stats">
+            <span class="stat-item">📝 Total: ${summary.total_assignments}</span>
+            <span class="stat-item high-priority">🔥 High: ${summary.high_priority}</span>
+            <span class="stat-item medium-priority">⚡ Medium: ${summary.medium_priority}</span>
+          </div>
+        </div>
+      `;
+    }
+    
+    // Build assignment cards for each course
+    let coursesHtml = '';
+    courses.forEach(course => {
+      const assignments = course.assignments || [];
+      
+      let assignmentsHtml = '';
+      assignments.forEach(assignment => {
+        const priorityClass = `priority-${assignment.priority}`;
+        const dueDate = new Date(assignment.due_datetime);
+        const formattedDate = dueDate.toLocaleDateString();
+        const formattedTime = dueDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        
+        assignmentsHtml += `
+          <div class="assignment-card ${priorityClass}">
+            <div class="assignment-header">
+              <h4 class="assignment-name">${this.escapeHtml(assignment.name)}</h4>
+              <span class="priority-badge ${priorityClass}">${assignment.priority.toUpperCase()}</span>
+            </div>
+            <div class="assignment-details">
+              <div class="due-date">
+                📅 Due: ${formattedDate} at ${formattedTime}
+              </div>
+              ${assignment.points_possible ? `<div class="points">💯 Points: ${assignment.points_possible}</div>` : ''}
+              <div class="assignment-actions">
+                <a href="${assignment.details_url}" target="_blank" class="btn-primary">View Details</a>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+      
+      coursesHtml += `
+        <div class="course-section">
+          <h3 class="course-title">${this.escapeHtml(course.course_name)}</h3>
+          <div class="assignments-grid">
+            ${assignmentsHtml}
+          </div>
+        </div>
+      `;
+    });
+    
+    // Return the complete message HTML
+    return `
+      <div class="message bot">
+        <div class="bot-avatar" style="background-color: #8B0000; color: white; display: flex; justify-content: center; align-items: center;">S</div>
+        <div class="message-content">
+          <div class="assignments-response">
+            <p class="response-message">${this.escapeHtml(message)}</p>
+            ${summaryHtml}
+            ${coursesHtml}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Helper method: Render default message for non-structured responses
+  renderDefaultMessage(responseText) {
+    const responseHtml = this.convertUrlsToLinks(responseText || "Received a response but couldn't extract the message content.");
+    
+    return `
+      <div class="message bot">
+        <div class="bot-avatar" style="background-color: #8B0000; color: white; display: flex; justify-content: center; align-items: center;">S</div>
+        <div class="message-content">
+          <p>${responseHtml}</p>
+        </div>
+      </div>
+    `;
+  }
   
   async sendMessage(message) {
     const messagesContainer = document.querySelector('.chat-messages');
@@ -199,18 +288,26 @@ class ChatBot {
         loadingMessage.remove();
       }
       
-      // Process response text to convert URLs to links
-      const responseHtml = this.convertUrlsToLinks(data.response || "Received a response but couldn't extract the message content.");
+      // Check if response is structured JSON
+      let botMessageHtml;
+      try {
+        const structuredResponse = JSON.parse(data.response);
+        
+        if (structuredResponse.response_type === 'assignments') {
+          // Render assignment cards
+          console.log('🎯 Rendering assignment cards');
+          botMessageHtml = this.renderAssignmentCards(structuredResponse);
+        } else {
+          // Handle other structured response types in the future
+          botMessageHtml = this.renderDefaultMessage(data.response);
+        }
+      } catch (e) {
+        // Not structured JSON, render as normal text
+        console.log('📝 Rendering as plain text');
+        botMessageHtml = this.renderDefaultMessage(data.response);
+      }
       
       // Add bot reply
-      const botMessageHtml = `
-        <div class="message bot">
-          <div class="bot-avatar" style="background-color: #8B0000; color: white; display: flex; justify-content: center; align-items: center;">S</div>
-          <div class="message-content">
-            <p>${responseHtml}</p>
-          </div>
-        </div>
-      `;
       messagesContainer.insertAdjacentHTML('beforeend', botMessageHtml);
       
       // Scroll to bottom

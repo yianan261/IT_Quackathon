@@ -217,3 +217,175 @@
   height: 20px;
   filter: brightness(0) invert(1);
 } 
+
+/* Assignment Cards Styling */
+.assignments-response {
+  width: 100%;
+}
+
+.response-message {
+  margin-bottom: 15px;
+  font-weight: 500;
+  color: #333;
+}
+
+.assignment-summary {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 15px;
+  border-left: 4px solid #8B0000;
+}
+
+.summary-stats {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.stat-item {
+  background: white;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.stat-item.high-priority {
+  background: #fee;
+  color: #dc3545;
+}
+
+.stat-item.medium-priority {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.course-section {
+  margin-bottom: 20px;
+}
+
+.course-title {
+  color: #8B0000;
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  padding-bottom: 5px;
+  border-bottom: 2px solid #8B0000;
+}
+
+.assignments-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.assignment-card {
+  background: white;
+  border-radius: 8px;
+  padding: 12px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  border-left: 4px solid #ddd;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.assignment-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.assignment-card.priority-high {
+  border-left-color: #dc3545;
+  background: linear-gradient(135deg, #fff 0%, #fef7f7 100%);
+}
+
+.assignment-card.priority-medium {
+  border-left-color: #ffc107;
+  background: linear-gradient(135deg, #fff 0%, #fffdf0 100%);
+}
+
+.assignment-card.priority-low {
+  border-left-color: #28a745;
+  background: linear-gradient(135deg, #fff 0%, #f7fef7 100%);
+}
+
+.assignment-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.assignment-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+  flex-grow: 1;
+}
+
+.priority-badge {
+  background: #f8f9fa;
+  color: #666;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  margin-left: 8px;
+}
+
+.priority-badge.priority-high {
+  background: #dc3545;
+  color: white;
+}
+
+.priority-badge.priority-medium {
+  background: #ffc107;
+  color: #333;
+}
+
+.priority-badge.priority-low {
+  background: #28a745;
+  color: white;
+}
+
+.assignment-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.due-date {
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+}
+
+.points {
+  font-size: 12px;
+  color: #666;
+}
+
+.assignment-actions {
+  margin-top: 6px;
+}
+
+.btn-primary {
+  background: #8B0000;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 500;
+  transition: background-color 0.2s ease;
+  display: inline-block;
+}
+
+.btn-primary:hover {
+  background: #6d0000;
+  text-decoration: none;
+  color: white;
+}

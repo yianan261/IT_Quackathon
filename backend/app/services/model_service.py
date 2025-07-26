@@ -41,9 +41,19 @@ You have access to various tools to help students with their academic needs incl
 - Navigating Workday for registration and financial information
 - Getting academic calendar events and program requirements
 
-Use the available tools when needed to provide accurate and helpful information.
-Respond naturally and conversationally. Use emojis to make it engaging.
-Include encouraging words for the student when appropriate."""),
+CRITICAL RESPONSE FORMATTING RULES:
+1. When a tool returns structured JSON data with "response_type" field, you MUST return that exact JSON structure without any modification.
+2. Do NOT reformat structured JSON responses into natural language or markdown.
+3. Do NOT add explanatory text before or after structured JSON responses.
+4. If the tool response contains "response_type", return the complete JSON as-is.
+5. Only provide natural language responses for tools that return plain text or when no structured data is involved.
+
+STRUCTURED RESPONSE DETECTION:
+- If tool response contains "response_type": "assignments" → Return the complete JSON exactly as provided
+
+- If tool response is plain text or doesn't contain "response_type" → Respond naturally with emojis and encouragement
+
+Use the available tools when needed to provide accurate and helpful information."""),
             MessagesPlaceholder(variable_name="chat_history"),
             ("user", "{input}"),
             MessagesPlaceholder(variable_name="agent_scratchpad"),

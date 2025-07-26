@@ -5,19 +5,55 @@ services:
     ports:
       - "8000:8000"
     environment:
+      # OpenAI and LangSmith
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY}
+      
+      # Canvas LMS Integration
       - CANVAS_API_URL=${CANVAS_API_URL}
       - CANVAS_API_KEY=${CANVAS_API_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      
+      # Workday Integration
+      - WORKDAY_USERNAME=${WORKDAY_USERNAME}
+      - WORKDAY_PASSWORD=${WORKDAY_PASSWORD}
+      
+      # Database (if using)
       - COSMOSDB_URI=${COSMOSDB_URI}
       - COSMOSDB_KEY=${COSMOSDB_KEY}
       - COSMOSDB_DATABASE=${COSMOSDB_DATABASE}
+      
+      # Redis connection
       - REDIS_HOST=redis
+      
+      # RAG/Knowledge base settings
+      - RAG_ENABLED=true
+      
+      # Browser automation settings
+      - DISPLAY=:99
+      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
     volumes:
       - ./backend:/app/backend
+      # Persist browser profiles and screenshots
+      - browser_profiles:/app/backend/app/services/chrome_profile
+      - navigation_screenshots:/app/backend/app/navigation_screenshots
     depends_on:
       - redis
+    # Add security options for browser automation
+    security_opt:
+      - seccomp:unconfined
+    # Shared memory size for browser
+    shm_size: 2gb
 
   redis:
     image: redis:alpine
     ports:
       - "6379:6379"
+    # Persist Redis data
+    volumes:
+      - redis_data:/data
+
+# Named volumes for persistence
+volumes:
+  browser_profiles:
+  navigation_screenshots:
+  redis_data:

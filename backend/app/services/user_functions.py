@@ -1,6 +1,7 @@
 from typing import Any, List, Dict, Optional, Union
 import json
 import asyncio
+import logging
 from threading import Thread
 from langchain_core.tools import tool
 from app.services.canvas_service import CanvasService
@@ -13,6 +14,9 @@ from app.core.config import settings
 # Create singleton instances
 _canvas_service = CanvasService()
 _stevens_service = StevensService()
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Initialize RAG service if enabled
 _rag_service: Optional[RAGService] = None
@@ -124,26 +128,130 @@ def get_course_assignments(course_identifier: str) -> str:
     return json.dumps(assignments)
 
 
-@tool
+@tool  
 def get_upcoming_courses_assignments() -> str:
     """
-    Get upcoming assignments for all enrolled courses.
+    Get upcoming assignments for all enrolled courses in structured format for UI rendering.
+    
+    IMPORTANT: This tool returns structured JSON data with response_type, data, and ui_component fields.
+    Return the JSON response exactly as provided without modification.
     
     Returns:
-        str: A JSON string containing assignments for all courses.
+        str: A structured JSON string containing assignments data for frontend rendering.
     """
+    from datetime import datetime, timezone
+    import re
+    
     courses = _canvas_service.get_current_courses()
-    all_assignments = []
-
-    for course in courses:
-        assignments = _canvas_service.get_assignments_for_course(course['id'])
-        if assignments:
-            all_assignments.append({
-                "course_name": course["name"],
-                "assignments": assignments
-            })
-
-    return json.dumps({"courses": all_assignments})
+    all_assignments_data = _canvas_service.get_assignments_for_course(courses)
+    
+    # Transform to structured format
+    structured_courses = []
+    total_assignments = 0
+    due_today = 0
+    due_this_week = 0 
+    due_next_week = 0
+    high_priority = 0
+    medium_priority = 0
+    low_priority = 0
+    
+    current_date = datetime.now(timezone.utc)
+    
+    for course_data in all_assignments_data.get("courses", []):
+        course_assignments = []
+        
+        for assignment in course_data.get("assignments", []):
+            # Parse due date
+            due_at = assignment.get("due_at", "")
+            if due_at:
+                try:
+                    due_datetime = datetime.fromisoformat(due_at.replace("Z", "+00:00"))
+                    days_until_due = (due_datetime - current_date).days
+                    
+                    # Determine priority based on days until due
+                    if days_until_due <= 2:
+                        priority = "high"
+                        high_priority += 1
+                        if days_until_due == 0:
+                            due_today += 1
+                    elif days_until_due <= 7:
+                        priority = "medium" 
+                        medium_priority += 1
+                        due_this_week += 1
+                    else:
+                        priority = "low"
+                        low_priority += 1
+                        if days_until_due <= 14:
+                            due_next_week += 1
+                    
+                    # Extract assignment ID from URL if available
+                    assignment_id = None
+                    html_url = assignment.get("html_url", "")
+                    if html_url:
+                        match = re.search(r'/assignments/(\d+)', html_url)
+                        assignment_id = match.group(1) if match else str(hash(assignment.get("name", "")))
+                    
+                    # Structure assignment data
+                    structured_assignment = {
+                        "assignment_id": assignment_id or str(hash(assignment.get("name", ""))),
+                        "name": assignment.get("name", ""),
+                        "title": assignment.get("name", ""),
+                        "due_date": due_datetime.strftime("%Y-%m-%d"),
+                        "due_time": due_datetime.strftime("%H:%M"),
+                        "due_datetime": due_datetime.isoformat(),
+                        "priority": priority,
+                        "status": "pending",
+                        "days_until_due": days_until_due,
+                        "details_url": html_url,
+                        "points_possible": assignment.get("points_possible"),
+                        "additional_resources": []
+                    }
+                    
+                    course_assignments.append(structured_assignment)
+                    total_assignments += 1
+                    
+                except (ValueError, AttributeError) as e:
+                    logger.warning(f"Error parsing assignment date: {e}")
+                    continue
+        
+        if course_assignments:
+            # Sort assignments by due date
+            course_assignments.sort(key=lambda x: x["due_datetime"])
+            
+            structured_course = {
+                "course_id": str(course_data.get("course_id", "")),
+                "course_code": course_data.get("course_name", "").split("(")[0].strip(),
+                "course_name": course_data.get("course_name", ""),
+                "assignments": course_assignments
+            }
+            structured_courses.append(structured_course)
+    
+    # Create structured response
+    structured_response = {
+        "response_type": "assignments",
+        "message": "Here are your upcoming assignments across all courses:",
+        "data": {
+            "courses": structured_courses,
+            "summary": {
+                "total_assignments": total_assignments,
+                "due_today": due_today,
+                "due_this_week": due_this_week,
+                "due_next_week": due_next_week,
+                "overdue": 0,
+                "high_priority": high_priority,
+                "medium_priority": medium_priority,
+                "low_priority": low_priority
+            }
+        },
+        "ui_component": "AssignmentTimeline",
+        "suggestions": [
+            "Show me details for a specific assignment",
+            "What's due today?",
+            "Help me prioritize my assignments"
+        ]
+    }
+    
+    return json.dumps(structured_response)
 
 
 @tool

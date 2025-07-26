@@ -7,8 +7,8 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Stevens AI Assistant"
 
     OPENAI_API_KEY: Optional[str] = None
-    OPENAI_MODEL: str = "gpt-4-turbo-preview"
-    MAX_TOKENS: int = 1000
+    OPENAI_MODEL: str = "gpt-4o"  # Most advanced model for presentation
+    MAX_TOKENS: int = 4000  # Increased for structured JSON responses
 
     # LangSmith Configuration
     LANGCHAIN_TRACING_V2: str = "true"

@@ -55,6 +55,30 @@ def extract_course_reference(message: str) -> str:
     return ""
 
 
+def process_agent_response(response_content: str) -> str:
+    """
+    Process agent response to handle structured JSON data.
+    If response is structured JSON with response_type, return it as-is.
+    Otherwise, return the original response.
+    """
+    try:
+        # Try to parse as JSON
+        parsed = json.loads(response_content)
+        
+        # Check if it's a structured response
+        if isinstance(parsed, dict) and "response_type" in parsed:
+            logger.info(f"✅ Detected structured response type: {parsed.get('response_type')}")
+            # Return the structured JSON as a string
+            return response_content
+            
+    except (json.JSONDecodeError, ValueError):
+        # Not JSON, continue with normal processing
+        pass
+    
+    # Return original response for non-structured content
+    return response_content
+
+
 @router.post("/", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
@@ -69,7 +93,16 @@ async def chat(
                 "content": msg.content
             } for msg in request.messages])
 
-        return ChatResponse(response=response["content"])
+        # Debug: Log the raw response
+        logger.info(f"🔍 Raw LLM response length: {len(response['content'])} characters")
+        logger.info(f"🔍 Raw LLM response preview: {response['content'][:200]}...")
+
+        # Process the response to handle structured data
+        processed_response = process_agent_response(response["content"])
+        
+        logger.info(f"🔍 Processed response length: {len(processed_response)} characters")
+        
+        return ChatResponse(response=processed_response)
 
     except Exception as e:
         logger.error(f"Error in chat endpoint: {str(e)}")
