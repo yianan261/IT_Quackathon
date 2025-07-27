@@ -4,7 +4,14 @@ const { ALLOWED_DOMAINS = ['localhost:8000', 'login.stevens.edu'], API_ENDPOINT 
 class ChatBot {
   constructor() {
     this.isOpen = false;
+    this.isRecording = false;
+    this.recognition = null;
+    this.speechSynthesis = window.speechSynthesis;
+    this.voiceOutputEnabled = false; // Users can toggle this
+    this.currentSpeakingMessageId = null; // Track which message is currently being spoken
+    this.messageIdCounter = 0; // Counter for unique message IDs
     this.init();
+    this.initVoice();
   }
 
   init() {
@@ -39,13 +46,14 @@ class ChatBot {
         </div>
         <h2>Stevens AI Assistant</h2>
         <div class="header-controls">
+          <button class="speaker-btn" title="Toggle voice output">🔇</button>
           <button class="minimize-btn">−</button>
           <button class="close-btn">×</button>
         </div>
       </div>
       <div class="chat-body">
         <div class="chat-messages">
-          <div class="message bot">
+          <div class="message bot" data-message-id="welcome-msg">
             <div class="bot-avatar" style="background-color: #8B0000; color: white; display: flex; justify-content: center; align-items: center;">S</div>
             <div class="message-content">
               <p>Hi, I'm your Stevens AI Assistant! I'm here to help answer your questions about Stevens Institute of Technology.</p>
@@ -57,11 +65,22 @@ class ChatBot {
                   <button class="suggestion-btn" data-suggestion="Help me register for courses">🎓 Help me register for courses</button>
                 </div>
               </div>
+              <div class="message-controls">
+                <button class="control-btn speaker-control" data-message-id="welcome-msg" title="Read aloud">
+                  <span class="speaker-icon">🔊</span>
+                </button>
+                <button class="control-btn copy-control" data-message-id="welcome-msg" title="Copy message">
+                  <span class="copy-icon">📋</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
         <div class="chat-input">
           <input type="text" placeholder="Ask me a question">
+          <button class="voice-btn" title="Voice input">
+            <span style="color: #8B0000;">🎤</span>
+          </button>
           <button class="send-btn">
             <span style="color: white;">↑</span>
           </button>
@@ -84,6 +103,10 @@ class ChatBot {
     // Close button
     const closeBtn = document.querySelector('.close-btn');
     closeBtn.addEventListener('click', () => this.closeChat());
+
+    // Speaker toggle button
+    const speakerBtn = document.querySelector('.speaker-btn');
+    speakerBtn.addEventListener('click', () => this.toggleVoiceOutput());
 
     // Send message
     const input = document.querySelector('.chat-input input');
@@ -111,7 +134,26 @@ class ChatBot {
         const suggestion = e.target.getAttribute('data-suggestion');
         this.handleSuggestionClick(suggestion);
       }
+      
+      // Handle speaker control buttons
+      if (e.target.closest('.speaker-control')) {
+        const messageId = e.target.closest('.speaker-control').getAttribute('data-message-id');
+        this.toggleMessageSpeech(messageId);
+      }
+      
+      // Handle copy control buttons
+      if (e.target.closest('.copy-control')) {
+        const messageId = e.target.closest('.copy-control').getAttribute('data-message-id');
+        this.copyMessage(messageId);
+      }
     });
+
+    // Voice button
+    const voiceBtn = document.querySelector('.voice-btn');
+    voiceBtn.addEventListener('click', () => this.toggleVoiceRecording());
+
+    // Initialize button states
+    this.updateSpeakerButton();
   }
 
   toggleChat() {
@@ -124,6 +166,28 @@ class ChatBot {
     const container = document.getElementById('ducking-ai-container');
     this.isOpen = false;
     container.classList.add('chat-closed');
+  }
+
+  // Toggle voice output
+  toggleVoiceOutput() {
+    this.voiceOutputEnabled = !this.voiceOutputEnabled;
+    this.updateSpeakerButton();
+    console.log('🔊 Voice output:', this.voiceOutputEnabled ? 'enabled' : 'disabled');
+  }
+
+  // Update speaker button appearance
+  updateSpeakerButton() {
+    const speakerBtn = document.querySelector('.speaker-btn');
+    
+    if (this.voiceOutputEnabled) {
+      speakerBtn.textContent = '🔊';
+      speakerBtn.title = 'Voice output enabled (click to disable)';
+      speakerBtn.style.color = '#8B0000';
+    } else {
+      speakerBtn.textContent = '🔇';
+      speakerBtn.title = 'Voice output disabled (click to enable)';
+      speakerBtn.style.color = '#6c757d';
+    }
   }
 
   // Helper method: Escape HTML special characters
@@ -229,9 +293,12 @@ class ChatBot {
       `;
     }
     
+    // Generate unique message ID
+    const messageId = `msg-${++this.messageIdCounter}`;
+    
     // Return the complete message HTML
     return `
-      <div class="message bot">
+      <div class="message bot" data-message-id="${messageId}">
         <div class="bot-avatar" style="background-color: #8B0000; color: white; display: flex; justify-content: center; align-items: center;">S</div>
         <div class="message-content">
           <div class="assignments-response">
@@ -239,6 +306,14 @@ class ChatBot {
             ${summaryHtml}
             ${coursesHtml}
             ${suggestionsHtml}
+          </div>
+          <div class="message-controls">
+            <button class="control-btn speaker-control" data-message-id="${messageId}" title="Read aloud">
+              <span class="speaker-icon">🔊</span>
+            </button>
+            <button class="control-btn copy-control" data-message-id="${messageId}" title="Copy message">
+              <span class="copy-icon">📋</span>
+            </button>
           </div>
         </div>
       </div>
@@ -248,12 +323,21 @@ class ChatBot {
   // Helper method: Render default message for non-structured responses
   renderDefaultMessage(responseText) {
     const responseHtml = this.convertUrlsToLinks(responseText || "Received a response but couldn't extract the message content.");
+    const messageId = `msg-${++this.messageIdCounter}`;
     
     return `
-      <div class="message bot">
+      <div class="message bot" data-message-id="${messageId}">
         <div class="bot-avatar" style="background-color: #8B0000; color: white; display: flex; justify-content: center; align-items: center;">S</div>
         <div class="message-content">
           <p>${responseHtml}</p>
+          <div class="message-controls">
+            <button class="control-btn speaker-control" data-message-id="${messageId}" title="Read aloud">
+              <span class="speaker-icon">🔊</span>
+            </button>
+            <button class="control-btn copy-control" data-message-id="${messageId}" title="Copy message">
+              <span class="copy-icon">📋</span>
+            </button>
+          </div>
         </div>
       </div>
     `;
@@ -278,6 +362,343 @@ class ChatBot {
       console.error('❌ Input field not found!');
     }
   }
+
+  // Initialize voice recognition
+  initVoice() {
+    // Check if browser supports speech recognition
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
+    if (!SpeechRecognition) {
+      console.warn('🎤 Speech recognition not supported in this browser');
+      return;
+    }
+
+    this.recognition = new SpeechRecognition();
+    this.recognition.continuous = false;
+    this.recognition.interimResults = true;
+    this.recognition.lang = 'en-US';
+
+    this.recognition.onstart = () => {
+      console.log('🎤 Voice recording started');
+      this.isRecording = true;
+      this.updateVoiceButton();
+    };
+
+    this.recognition.onresult = (event) => {
+      let finalTranscript = '';
+      let interimTranscript = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript;
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+
+      const input = document.querySelector('.chat-input input');
+      if (input) {
+        input.value = finalTranscript + interimTranscript;
+      }
+
+      if (finalTranscript) {
+        console.log('🎤 Final transcript:', finalTranscript);
+        this.sendMessage(finalTranscript);
+        input.value = '';
+      }
+    };
+
+    this.recognition.onend = () => {
+      console.log('🎤 Voice recording ended');
+      this.isRecording = false;
+      this.updateVoiceButton();
+    };
+
+    this.recognition.onerror = (event) => {
+      console.error('🎤 Voice recognition error:', event.error);
+      this.isRecording = false;
+      this.updateVoiceButton();
+    };
+  }
+
+  // Toggle voice recording
+  toggleVoiceRecording() {
+    if (!this.recognition) {
+      alert('Voice recognition not supported in this browser');
+      return;
+    }
+
+    if (this.isRecording) {
+      this.recognition.stop();
+    } else {
+      this.recognition.start();
+    }
+  }
+
+  // Update voice button appearance
+  updateVoiceButton() {
+    const voiceBtn = document.querySelector('.voice-btn');
+    const voiceIcon = voiceBtn.querySelector('span');
+    
+    if (this.isRecording) {
+      voiceIcon.textContent = '🔴';
+      voiceIcon.style.color = '#dc3545';
+      voiceBtn.title = '🎤 Recording... (click to stop)';
+      voiceBtn.style.background = '#ffe6e6';
+    } else {
+      voiceIcon.textContent = '🎤';
+      voiceIcon.style.color = '#8B0000';
+      voiceBtn.title = 'Voice input';
+      voiceBtn.style.background = 'transparent';
+    }
+  }
+
+  // Speak text using text-to-speech
+  speakText(text) {
+    if (!this.speechSynthesis) {
+      return;
+    }
+
+    // Only speak if voice output is enabled
+    if (!this.voiceOutputEnabled) {
+      return;
+    }
+
+    // Cancel any ongoing speech
+    this.speechSynthesis.cancel();
+
+    // Clean text for speech (remove HTML tags, extra whitespace)
+    const cleanText = text
+      .replace(/<[^>]*>/g, '') // Remove HTML tags
+      .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+      .trim();
+
+    if (cleanText.length === 0) return;
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = 0.9;
+    utterance.pitch = 1;
+    utterance.volume = 0.8;
+
+    // Try to use a more natural voice
+    const voices = this.speechSynthesis.getVoices();
+    const preferredVoice = voices.find(voice => 
+      voice.name.includes('Google') && voice.lang.includes('en')
+    ) || voices.find(voice => voice.lang.includes('en'));
+    
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+    }
+
+    // Add event listeners for speech events
+    utterance.onstart = () => {
+      console.log('🔊 Speech started');
+    };
+    
+    utterance.onend = () => {
+      console.log('🔊 Speech ended');
+      if (this.currentSpeakingMessageId) {
+        this.updateSpeakerIcon(this.currentSpeakingMessageId, false);
+        this.currentSpeakingMessageId = null;
+      }
+    };
+    
+    utterance.onerror = () => {
+      console.log('🔊 Speech error');
+      if (this.currentSpeakingMessageId) {
+        this.updateSpeakerIcon(this.currentSpeakingMessageId, false);
+        this.currentSpeakingMessageId = null;
+      }
+    };
+
+    this.speechSynthesis.speak(utterance);
+    console.log('🔊 Speaking:', cleanText.substring(0, 50) + '...');
+  }
+
+  // Toggle speech for a specific message
+  toggleMessageSpeech(messageId) {
+    if (!this.speechSynthesis) {
+      alert('Speech synthesis not supported in this browser');
+      return;
+    }
+
+    // If this message is currently being spoken, stop it
+    if (this.currentSpeakingMessageId === messageId) {
+      this.speechSynthesis.cancel();
+      this.updateSpeakerIcon(messageId, false);
+      this.currentSpeakingMessageId = null;
+      console.log('🔊 Stopped speaking message:', messageId);
+      return;
+    }
+
+    // Stop any currently speaking message
+    if (this.currentSpeakingMessageId) {
+      this.speechSynthesis.cancel();
+      this.updateSpeakerIcon(this.currentSpeakingMessageId, false);
+    }
+
+    // Get the message content
+    const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (!messageElement) {
+      console.error('Message element not found:', messageId);
+      return;
+    }
+
+    // Extract text content for speaking
+    let textToSpeak = '';
+    const messageContent = messageElement.querySelector('.message-content');
+    
+    // Check if it's a structured response (assignments)
+    const assignmentsResponse = messageContent.querySelector('.assignments-response');
+    if (assignmentsResponse) {
+      // For structured responses, speak the main message
+      const responseMessage = assignmentsResponse.querySelector('.response-message');
+      textToSpeak = responseMessage ? responseMessage.textContent : 'Here is the information you requested.';
+    } else {
+      // For regular messages, speak the paragraph content
+      const paragraph = messageContent.querySelector('p');
+      textToSpeak = paragraph ? paragraph.textContent : messageContent.textContent;
+    }
+
+    // Clean and speak the text
+    const cleanText = textToSpeak
+      .replace(/<[^>]*>/g, '') // Remove HTML tags
+      .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+      .trim();
+
+    if (cleanText.length === 0) {
+      console.error('No text to speak for message:', messageId);
+      return;
+    }
+
+    // Set up speech
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = 0.9;
+    utterance.pitch = 1;
+    utterance.volume = 0.8;
+
+    // Try to use a more natural voice
+    const voices = this.speechSynthesis.getVoices();
+    const preferredVoice = voices.find(voice => 
+      voice.name.includes('Google') && voice.lang.includes('en')
+    ) || voices.find(voice => voice.lang.includes('en'));
+    
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+    }
+
+    // Set up event listeners
+    utterance.onstart = () => {
+      this.currentSpeakingMessageId = messageId;
+      this.updateSpeakerIcon(messageId, true);
+      console.log('🔊 Started speaking message:', messageId);
+    };
+    
+    utterance.onend = () => {
+      this.updateSpeakerIcon(messageId, false);
+      this.currentSpeakingMessageId = null;
+      console.log('🔊 Finished speaking message:', messageId);
+    };
+    
+    utterance.onerror = () => {
+      this.updateSpeakerIcon(messageId, false);
+      this.currentSpeakingMessageId = null;
+      console.log('🔊 Error speaking message:', messageId);
+    };
+
+    // Start speaking
+    this.speechSynthesis.speak(utterance);
+  }
+
+  // Update speaker icon based on speaking state
+  updateSpeakerIcon(messageId, isSpeaking) {
+    const speakerBtn = document.querySelector(`.speaker-control[data-message-id="${messageId}"]`);
+    if (!speakerBtn) return;
+
+    const icon = speakerBtn.querySelector('.speaker-icon');
+    if (isSpeaking) {
+      icon.textContent = '🔇';
+      speakerBtn.title = 'Stop reading';
+      speakerBtn.style.background = '#ffe6e6';
+    } else {
+      icon.textContent = '🔊';
+      speakerBtn.title = 'Read aloud';
+      speakerBtn.style.background = 'transparent';
+    }
+  }
+
+  // Copy message content to clipboard
+  async copyMessage(messageId) {
+    const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (!messageElement) {
+      console.error('Message element not found:', messageId);
+      return;
+    }
+
+    const messageContent = messageElement.querySelector('.message-content');
+    let textToCopy = '';
+
+    // Check if it's a structured response (assignments)
+    const assignmentsResponse = messageContent.querySelector('.assignments-response');
+    if (assignmentsResponse) {
+      // For structured responses, copy a formatted version
+      const responseMessage = assignmentsResponse.querySelector('.response-message');
+      textToCopy = responseMessage ? responseMessage.textContent : '';
+      
+      // Add course information
+      const courseSections = assignmentsResponse.querySelectorAll('.course-section');
+      courseSections.forEach(section => {
+        const courseTitle = section.querySelector('.course-title');
+        if (courseTitle) {
+          textToCopy += '\n\n' + courseTitle.textContent + ':\n';
+          
+          const assignments = section.querySelectorAll('.assignment-card');
+          assignments.forEach(assignment => {
+            const name = assignment.querySelector('.assignment-name');
+            const dueDate = assignment.querySelector('.due-date');
+            if (name && dueDate) {
+              textToCopy += '• ' + name.textContent + ' - ' + dueDate.textContent + '\n';
+            }
+          });
+        }
+      });
+    } else {
+      // For regular messages, copy the paragraph content
+      const paragraph = messageContent.querySelector('p');
+      textToCopy = paragraph ? paragraph.textContent : messageContent.textContent;
+    }
+
+    // Clean up the text
+    textToCopy = textToCopy.replace(/\s+/g, ' ').trim();
+
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      
+      // Show feedback
+      const copyBtn = document.querySelector(`.copy-control[data-message-id="${messageId}"]`);
+      const originalIcon = copyBtn.querySelector('.copy-icon').textContent;
+      const originalTitle = copyBtn.title;
+      
+      copyBtn.querySelector('.copy-icon').textContent = '✅';
+      copyBtn.title = 'Copied!';
+      copyBtn.style.background = '#e8f5e9';
+      
+      // Reset after 2 seconds
+      setTimeout(() => {
+        copyBtn.querySelector('.copy-icon').textContent = originalIcon;
+        copyBtn.title = originalTitle;
+        copyBtn.style.background = 'transparent';
+      }, 2000);
+      
+      console.log('📋 Copied message:', messageId);
+    } catch (err) {
+      console.error('Failed to copy text:', err);
+      alert('Failed to copy to clipboard');
+    }
+  }
+
+
   
   async sendMessage(message) {
     const messagesContainer = document.querySelector('.chat-messages');
@@ -364,6 +785,27 @@ class ChatBot {
       
       // Add bot reply
       messagesContainer.insertAdjacentHTML('beforeend', botMessageHtml);
+      
+              // Handle automatic voice output (only if global toggle is enabled)
+      if (this.voiceOutputEnabled && !this.currentSpeakingMessageId) {
+        try {
+          const parsedResponse = JSON.parse(data.response);
+          if (!parsedResponse.response_type) {
+            // Plain text response
+            this.speakText(data.response);
+            console.log('🔊 Global voice output: speaking full response');
+          } else {
+            // Structured response (like assignments) - speak summary
+            const message = parsedResponse.message || "Here's the information you requested.";
+            this.speakText(message);
+            console.log('🔊 Global voice output: speaking summary');
+          }
+        } catch (e) {
+          // Not JSON, plain text
+          this.speakText(data.response);
+          console.log('🔊 Global voice output: speaking text response');
+        }
+      }
       
       // Scroll to bottom
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
