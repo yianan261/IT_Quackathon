@@ -1,0 +1,23 @@
+{
+  "timestamp": "2025-07-27T14:45:39.398251",
+  "advisors": [
+    {
+      "role": "Faculty Advisor (by Academic Record)",
+      "cohort": "",
+      "person": "Jacek Ossowski",
+      "email": "jossowsk@stevens.edu"
+    },
+    {
+      "role": "Academic Advisor (by Student Cohort)",
+      "cohort": "Computer Science 30-credit Program\nDepartment of Computer Science Graduate Advising",
+      "person": "Jannine Cucchiara",
+      "email": "jhuambac@stevens.edu"
+    },
+    {
+      "role": "Auxiliary Advisor (by Student Cohort)",
+      "cohort": "All Graduate Students, SES",
+      "person": "Jessica Rosa",
+      "email": "jrosa@stevens.edu"
+    }
+  ]
+}

@@ -445,14 +445,14 @@ def get_advisors_info() -> str:
     async def _get_advisors():
         try:
             service = await get_workday_service()
-            
+            advisors = service.load_advisors_from_cache()
             # First try to get cached advisors
-            advisors = service.get_advisors()
+            # advisors = service.get_advisors()
             
             # If no cached advisors, fetch them fresh
-            if not advisors:
-                print("[DEBUG] No cached advisors, fetching fresh data...")
-                advisors = await service.get_advisors()
+            # if not advisors:
+            #     print("[DEBUG] No cached advisors, fetching fresh data...")
+            #     advisors = await service.get_advisors()
             
             return json.dumps({
                 "success": True,

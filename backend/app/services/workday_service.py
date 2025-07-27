@@ -2,6 +2,7 @@
 
 import os
 import logging
+import json
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
@@ -38,6 +39,69 @@ class WorkdayService:
         self.logged_in = False
         self.advisors = []
         self.browser_context = None
+        
+        # Cache file path for advisor info
+        self.cache_dir = os.path.join(os.path.dirname(__file__), "cache")
+        os.makedirs(self.cache_dir, exist_ok=True)
+        self.advisor_cache_file = os.path.join(self.cache_dir, "advisors_cache.json")
+
+    def save_advisors_to_cache(self, advisors_data):
+        """Save advisor information to cache file"""
+        try:
+            cache_data = {
+                "timestamp": datetime.now().isoformat(),
+                "advisors": advisors_data
+            }
+            with open(self.advisor_cache_file, 'w', encoding='utf-8') as f:
+                json.dump(cache_data, f, indent=2, ensure_ascii=False)
+            logger.info(f"✅ Saved {len(advisors_data)} advisors to cache: {self.advisor_cache_file}")
+            print(f"[DEBUG] Advisor cache saved with {len(advisors_data)} advisors")
+        except Exception as e:
+            logger.error(f"❌ Failed to save advisors to cache: {str(e)}")
+            print(f"[ERROR] Failed to save advisor cache: {str(e)}")
+
+    def load_advisors_from_cache(self):
+        """Load advisor information from cache file"""
+        try:
+            if not os.path.exists(self.advisor_cache_file):
+                logger.info("📁 No advisor cache file found")
+                return None
+            
+            with open(self.advisor_cache_file, 'r', encoding='utf-8') as f:
+                cache_data = json.load(f)
+            
+            # Check if cache is recent (less than 24 hours old)
+            cache_timestamp = datetime.fromisoformat(cache_data.get("timestamp", ""))
+            cache_age = datetime.now() - cache_timestamp
+            
+            if cache_age.days > 0:  # Cache older than 1 day
+                logger.info(f"📅 Advisor cache is {cache_age.days} days old, considered stale")
+                return None
+            
+            advisors = cache_data.get("advisors", [])
+            logger.info(f"✅ Loaded {len(advisors)} advisors from cache (age: {cache_age})")
+            print(f"[DEBUG] Loaded {len(advisors)} advisors from cache")
+            return advisors
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to load advisors from cache: {str(e)}")
+            print(f"[ERROR] Failed to load advisor cache: {str(e)}")
+            return None
+
+    def test_advisor_cache(self):
+        """Test function to demonstrate cache loading functionality"""
+        print("[TEST] Testing advisor cache functionality...")
+        
+        # Try to load from cache
+        cached_advisors = self.load_advisors_from_cache()
+        
+        if cached_advisors:
+            print(f"[TEST] ✅ Found {len(cached_advisors)} advisors in cache")
+            print(f"[TEST] Sample advisor data: {cached_advisors[0] if cached_advisors else 'None'}")
+        else:
+            print("[TEST] ❌ No cached advisor data found or cache is stale")
+        
+        return cached_advisors
 
     async def start(self):
         print("[DEBUG] WorkdayService.start() called")
@@ -141,7 +205,22 @@ class WorkdayService:
                 await self.page.wait_for_timeout(3000)
                 await self.page.click("text=Academics", timeout=10_000)
                 if not self.advisors:
+                    # TODO: In future, uncomment below to check cache first before fetching from Workday
+                    # cached_advisors = self.load_advisors_from_cache()
+                    # if cached_advisors:
+                    #     self.advisors = cached_advisors
+                    #     print("[DEBUG] Using cached advisor data")
+                    # else:
+                    #     self.advisors = await self.get_advisors_in_workday()
+                    #     if self.advisors:
+                    #         self.save_advisors_to_cache(self.advisors)
+                    
+                    # For now, always fetch fresh data and save to cache
                     self.advisors = await self.get_advisors_in_workday()
+                    # Save advisor info to cache file for future use
+                    if self.advisors:
+                        self.save_advisors_to_cache(self.advisors)
+                    
                 await self.page.click("text=Find Course Sections",
                                       timeout=10_000)
 
