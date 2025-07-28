@@ -412,16 +412,144 @@ def get_announcements_for_all_courses() -> str:
 @tool
 def get_announcements_for_specific_courses(course_identifier: str) -> str:
     """
-    Get announcements for a specific course.
+    Get announcements for a specific course in structured format for UI rendering.
+    
+    IMPORTANT: This tool returns structured JSON data with response_type, data, and ui_component fields.
+    Return the JSON response exactly as provided without modification.
     
     Args:
         course_identifier: Course code or name (e.g., 'EE 553', 'C++')
         
     Returns:
-        str: A JSON string containing announcements for the specified course.
+        str: A structured JSON string containing announcements data for the specified course.
     """
-    announcements = _canvas_service.get_announcements_for_course(course_identifier)
-    return json.dumps(announcements)
+    from datetime import datetime, timezone, timedelta
+    
+    # Get announcement data from Canvas service for specific course
+    announcements_data = _canvas_service.get_announcements_for_course(course_identifier)
+    courses_data = announcements_data.get("courses", [])
+    
+    # Handle case where no course found
+    if not courses_data:
+        return json.dumps({
+            "response_type": "announcements",
+            "message": f"No announcements found for course: {course_identifier}",
+            "data": {"courses": [], "summary": {"total_announcements": 0, "recent_announcements": 0, "courses_with_announcements": 0, "total_courses": 0}},
+            "ui_component": "AnnouncementsList",
+            "suggestions": ["Get all my course announcements", "Show me my current courses", "What assignments are due?"]
+        })
+    
+    # Transform to structured format (same logic as get_announcements_for_all_courses)
+    structured_courses = []
+    total_announcements = 0
+    recent_announcements = 0
+    courses_with_announcements = 0
+    
+    current_date = datetime.now(timezone.utc)
+    # Set cutoff date to February 1st of current year  
+    february_first = datetime(current_date.year, 2, 1, tzinfo=timezone.utc)
+    
+    for course_data in courses_data:
+        course_name = course_data.get("course_name", "")
+        announcements_link = course_data.get("course_announcements_link", "")
+        announcements = course_data.get("announcements", [])
+        
+        # Process announcements
+        processed_announcements = []
+        for announcement in announcements:
+            try:
+                posted_at = announcement.get("posted_at", "")
+                posted_datetime = datetime.fromisoformat(posted_at.replace("Z", "+00:00")) if posted_at else current_date
+                
+                # Determine if announcement is recent (within past week from current date)
+                one_week_ago = current_date - timedelta(days=7)
+                is_recent = posted_datetime >= one_week_ago
+                
+                # Only include announcements from February 1st onwards
+                if posted_datetime < february_first:
+                    continue
+                    
+                if is_recent:
+                    recent_announcements += 1
+                
+                # Clean message content (remove HTML tags for preview)
+                import re
+                message = announcement.get("message", "")
+                clean_message = re.sub(r'<[^>]+>', '', message).strip()
+                preview = clean_message[:150] + "..." if len(clean_message) > 150 else clean_message
+                
+                processed_announcement = {
+                    "title": announcement.get("title", "Announcement"),
+                    "author": announcement.get("author", {}).get("display_name", "Instructor"),
+                    "posted_at": posted_at,
+                    "posted_datetime": posted_datetime.isoformat(),
+                    "posted_date": posted_datetime.strftime("%Y-%m-%d"),
+                    "posted_time": posted_datetime.strftime("%H:%M"),
+                    "message_preview": preview,
+                    "full_message": message,
+                    "is_recent": is_recent,
+                    "url": announcement.get("url", "")
+                }
+                
+                processed_announcements.append(processed_announcement)
+                total_announcements += 1
+                
+            except (ValueError, AttributeError) as e:
+                logger.warning(f"Error processing announcement: {e}")
+                continue
+        
+        if processed_announcements:
+            courses_with_announcements += 1
+        
+        # Sort announcements by posted date (most recent first)
+        processed_announcements.sort(key=lambda x: x["posted_datetime"], reverse=True)
+        
+        # Limit to 3 announcements per course
+        processed_announcements = processed_announcements[:3]
+        
+        structured_course = {
+            "course_name": course_name,
+            "course_code": course_name.split()[0] if course_name else "",
+            "announcements_link": announcements_link,
+            "announcements": processed_announcements,
+            "announcement_count": len(processed_announcements)
+        }
+        structured_courses.append(structured_course)
+    
+    # Create structured response for specific course
+    course_name = courses_data[0].get("course_name", course_identifier) if courses_data else course_identifier
+    if total_announcements > 0:
+        message = f"Here are announcements for {course_name} since February 1st ({total_announcements} total, max 3 shown):"
+        suggestions = [
+            "Get all my course announcements",
+            "Show me recent announcements only", 
+            "What assignments are due for this course?"
+        ]
+    else:
+        message = f"No announcements found for {course_name} since February 1st. Here's a direct link to check:"
+        suggestions = [
+            "Get all my course announcements",
+            "Show me my current courses",
+            "What's due this week?"
+        ]
+    
+    structured_response = {
+        "response_type": "announcements",
+        "message": message,
+        "data": {
+            "courses": structured_courses,
+            "summary": {
+                "total_announcements": total_announcements,
+                "recent_announcements": recent_announcements,
+                "courses_with_announcements": courses_with_announcements,
+                "total_courses": len(structured_courses)
+            }
+        },
+        "ui_component": "AnnouncementsList",
+        "suggestions": suggestions
+    }
+    
+    return json.dumps(structured_response)
 
 
 @tool
