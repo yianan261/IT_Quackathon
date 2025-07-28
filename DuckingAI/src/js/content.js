@@ -320,6 +320,252 @@ class ChatBot {
     `;
   }
 
+  // Helper method: Render announcements cards for structured announcement data
+  renderAnnouncementsCards(structuredResponse) {
+    const { data, message, suggestions } = structuredResponse;
+    const { courses, summary } = data;
+    
+    // Build the summary header
+    let summaryHtml = '';
+    if (summary && summary.total_announcements > 0) {
+      summaryHtml = `
+        <div class="announcements-summary">
+          <div class="summary-stats">
+            <span class="stat-item">📢 Total: ${summary.total_announcements}</span>
+            <span class="stat-item recent">🔥 Recent: ${summary.recent_announcements}</span>
+            <span class="stat-item courses">📚 Courses: ${summary.courses_with_announcements}/${summary.total_courses}</span>
+          </div>
+        </div>
+      `;
+    }
+    
+    // Build announcement cards for each course
+    let coursesHtml = '';
+    courses.forEach(course => {
+      const announcements = course.announcements || [];
+      
+      // If course has announcements, show them as cards
+      if (announcements.length > 0) {
+        let announcementsHtml = '';
+        announcements.forEach(announcement => {
+          const postedDate = new Date(announcement.posted_datetime);
+          const formattedDate = postedDate.toLocaleDateString();
+          const formattedTime = postedDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+          const recentClass = announcement.is_recent ? 'recent' : '';
+          
+          announcementsHtml += `
+            <a href="${announcement.url}" target="_blank" class="announcement-card-link">
+              <div class="announcement-card ${recentClass}">
+                <div class="announcement-header">
+                  <h4 class="announcement-title">${this.escapeHtml(announcement.title)}</h4>
+                  ${announcement.is_recent ? '<span class="recent-badge">NEW</span>' : ''}
+                </div>
+                <div class="announcement-meta">
+                  <span class="announcement-author">👤 ${this.escapeHtml(announcement.author)}</span>
+                  <span class="announcement-date">📅 ${formattedDate} at ${formattedTime}</span>
+                </div>
+                <div class="announcement-preview">
+                  <p>${this.escapeHtml(announcement.message_preview)}</p>
+                </div>
+              </div>
+            </a>
+          `;
+        });
+        
+        coursesHtml += `
+          <div class="course-section">
+            <div class="course-header">
+              <h3 class="course-title">${this.escapeHtml(course.course_name)}</h3>
+              <span class="announcement-count">${announcements.length} announcement${announcements.length > 1 ? 's' : ''}</span>
+            </div>
+            <div class="announcements-grid">
+              ${announcementsHtml}
+            </div>
+          </div>
+        `;
+      } else {
+        // Course has no announcements, show link to check directly
+        coursesHtml += `
+          <div class="course-section no-announcements">
+            <div class="course-header">
+              <h3 class="course-title">${this.escapeHtml(course.course_name)}</h3>
+              <span class="no-announcements-text">No recent announcements</span>
+            </div>
+            <div class="course-link">
+              <a href="${course.announcements_link}" target="_blank" class="btn-primary">
+                📢 Check ${course.course_code} Announcements
+              </a>
+            </div>
+          </div>
+        `;
+      }
+    });
+    
+    // Build suggestions buttons if available
+    let suggestionsHtml = '';
+    if (suggestions && suggestions.length > 0) {
+      const suggestionButtons = suggestions.map((suggestion, index) => 
+        `<button class="suggestion-btn" data-suggestion="${this.escapeHtml(suggestion)}" data-index="${index}">${this.escapeHtml(suggestion)}</button>`
+      ).join('');
+      
+      suggestionsHtml = `
+        <div class="suggestions-section">
+          <p class="suggestions-title">💡 Try asking:</p>
+          <div class="suggestions-grid">
+            ${suggestionButtons}
+          </div>
+        </div>
+      `;
+    }
+    
+    // Generate unique message ID
+    const messageId = `msg-${++this.messageIdCounter}`;
+    
+    // Return the complete message HTML
+    return `
+      <div class="message bot" data-message-id="${messageId}">
+        <div class="bot-avatar" style="background-color: #8B0000; color: white; display: flex; justify-content: center; align-items: center;">S</div>
+        <div class="message-content">
+          <div class="announcements-response">
+            <p class="response-message">${this.escapeHtml(message)}</p>
+            ${summaryHtml}
+            ${coursesHtml}
+            ${suggestionsHtml}
+          </div>
+          <div class="message-controls">
+            <button class="control-btn speaker-control" data-message-id="${messageId}" title="Read aloud">
+              <span class="speaker-icon">🔊</span>
+            </button>
+            <button class="control-btn copy-control" data-message-id="${messageId}" title="Copy message">
+              <span class="copy-icon">📋</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Helper method: Render course comparison for structured course comparison data
+  renderCourseComparison(structuredResponse) {
+    const { data, message, suggestions } = structuredResponse;
+    const { courses, recommendations, comparison_title } = data;
+    
+    // Build the comparison title
+    let titleHtml = '';
+    if (comparison_title) {
+      titleHtml = `
+        <div class="comparison-title">
+          <h3>${this.escapeHtml(comparison_title)}</h3>
+        </div>
+      `;
+    }
+    
+    // Build course comparison sections
+    let coursesHtml = '';
+    courses.forEach((course, index) => {
+      const learningPoints = course.learning_points || [];
+      
+      let learningPointsHtml = '';
+      if (learningPoints.length > 0) {
+        learningPointsHtml = learningPoints.map(point => 
+          `<li class="learning-point">${this.escapeHtml(point)}</li>`
+        ).join('');
+      } else {
+        learningPointsHtml = '<li class="learning-point no-info">No specific information available</li>';
+      }
+      
+      coursesHtml += `
+        <div class="course-comparison-section">
+          <div class="course-comparison-header">
+            <h4 class="course-comparison-title">
+              ${index === 0 ? '📚' : '💻'} ${this.escapeHtml(course.course_name)}
+            </h4>
+            ${course.info_sources && course.info_sources.length > 0 ? 
+              `<span class="sources-count">${course.info_sources.length} source${course.info_sources.length > 1 ? 's' : ''}</span>` : ''
+            }
+          </div>
+          <div class="learning-objectives">
+            <p class="section-subtitle">What you'll learn and implement:</p>
+            <ul class="learning-points-list">
+              ${learningPointsHtml}
+            </ul>
+          </div>
+        </div>
+      `;
+    });
+    
+    // Build recommendations section
+    let recommendationsHtml = '';
+    if (recommendations && recommendations.length > 0) {
+      const recommendationCards = recommendations.map(rec => `
+        <div class="recommendation-card">
+          <div class="recommendation-header">
+            <h5 class="recommendation-title">${this.escapeHtml(rec.title)}</h5>
+            ${rec.course_preference && rec.course_preference !== 'both' && rec.course_preference !== 'consult_advisor' ? 
+              `<span class="course-preference">${this.escapeHtml(rec.course_preference)}</span>` : ''
+            }
+          </div>
+          <p class="recommendation-description">${this.escapeHtml(rec.description)}</p>
+        </div>
+      `).join('');
+      
+      recommendationsHtml = `
+        <div class="recommendations-section">
+          <h4 class="recommendations-title">💡 Course Selection Recommendations:</h4>
+          <div class="recommendations-grid">
+            ${recommendationCards}
+          </div>
+        </div>
+      `;
+    }
+    
+    // Build suggestions buttons if available
+    let suggestionsHtml = '';
+    if (suggestions && suggestions.length > 0) {
+      const suggestionButtons = suggestions.map((suggestion, index) => 
+        `<button class="suggestion-btn" data-suggestion="${this.escapeHtml(suggestion)}" data-index="${index}">${this.escapeHtml(suggestion)}</button>`
+      ).join('');
+      
+      suggestionsHtml = `
+        <div class="suggestions-section">
+          <p class="suggestions-title">💡 Try asking:</p>
+          <div class="suggestions-grid">
+            ${suggestionButtons}
+          </div>
+        </div>
+      `;
+    }
+    
+    // Generate unique message ID
+    const messageId = `msg-${++this.messageIdCounter}`;
+    
+    // Return the complete message HTML
+    return `
+      <div class="message bot" data-message-id="${messageId}">
+        <div class="bot-avatar" style="background-color: #8B0000; color: white; display: flex; justify-content: center; align-items: center;">S</div>
+        <div class="message-content">
+          <div class="course-comparison-response">
+            <p class="response-message">${this.escapeHtml(message)}</p>
+            ${titleHtml}
+            <div class="courses-comparison-grid">
+              ${coursesHtml}
+            </div>
+            ${recommendationsHtml}
+            ${suggestionsHtml}
+          </div>
+          <div class="message-controls">
+            <button class="control-btn speaker-control" data-message-id="${messageId}" title="Read aloud">
+              <span class="speaker-icon">🔊</span>
+            </button>
+            <button class="control-btn copy-control" data-message-id="${messageId}" title="Copy message">
+              <span class="copy-icon">📋</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   // Helper method: Render default message for non-structured responses
   renderDefaultMessage(responseText) {
     const responseHtml = this.convertUrlsToLinks(responseText || "Received a response but couldn't extract the message content.");
@@ -773,6 +1019,14 @@ class ChatBot {
           // Render assignment cards
           console.log('🎯 Rendering assignment cards');
           botMessageHtml = this.renderAssignmentCards(structuredResponse);
+        } else if (structuredResponse.response_type === 'announcements') {
+          // Render announcements cards
+          console.log('📢 Rendering announcements cards');
+          botMessageHtml = this.renderAnnouncementsCards(structuredResponse);
+        } else if (structuredResponse.response_type === 'course_comparison') {
+          // Render course comparison
+          console.log('🔍 Rendering course comparison');
+          botMessageHtml = this.renderCourseComparison(structuredResponse);
         } else {
           // Handle other structured response types in the future
           botMessageHtml = this.renderDefaultMessage(data.response);
