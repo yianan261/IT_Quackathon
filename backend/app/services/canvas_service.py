@@ -303,7 +303,8 @@ class CanvasService:
 
             results = []
             now = datetime.now(timezone.utc)
-            one_week_ago = now - timedelta(days=7)
+            # Set cutoff date to February 1st of current year
+            february_first = datetime(now.year, 2, 1, tzinfo=timezone.utc)
             # Iterate over each course and get announcements
             for course_info in course_infos:
                 course_id = course_info["id"]
@@ -334,9 +335,11 @@ class CanvasService:
                         try:
                             posted_date_utc = datetime.fromisoformat(
                                 posted_at.replace("Z", "+00:00"))
-                            # Only include announcements from past week onwards
-                            if posted_date_utc >= one_week_ago:
+                            # Only include announcements from February 1st onwards
+                            if posted_date_utc >= february_first:
                                 ann_list.append({
+                                    "id":
+                                    ann.get("id", ""),
                                     "title":
                                     ann.get("title", ""),
                                     "author": {
@@ -353,7 +356,9 @@ class CanvasService:
                                     "posted_at":
                                     ann.get("posted_at", ""),
                                     "message":
-                                    ann.get("message", "")
+                                    ann.get("message", ""),
+                                    "url":
+                                    f"https://sit.instructure.com/courses/{course_id}/discussion_topics/{ann.get('id', '')}"
                                 })
                                 logger.info(
                                     f"Found future announcement: {ann.get('title')} posted at {posted_date_utc}"
@@ -362,8 +367,11 @@ class CanvasService:
                             logger.error(
                                 f"Error parsing date {posted_at}: {str(e)}")
 
-                # Sort announcements chronologically (nearest future date first)
-                ann_list.sort(key=lambda x: x["posted_at"])
+                # Sort announcements chronologically (most recent first)
+                ann_list.sort(key=lambda x: x["posted_at"], reverse=True)
+                
+                # Limit to 3 announcements per course
+                ann_list = ann_list[:3]
 
                 results.append({
                     "course_name": course_name,
