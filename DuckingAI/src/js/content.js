@@ -45,6 +45,7 @@ class ChatBot {
           <span></span>
         </div>
         <h2>Stevens AI Assistant</h2>
+        <div class="resize-indicator">⊞</div>
         <div class="header-controls">
           <button class="speaker-btn" title="Toggle voice output">🔇</button>
           <button class="minimize-btn">−</button>
@@ -86,9 +87,17 @@ class ChatBot {
           </button>
         </div>
       </div>
+      
+      <!-- Resize Handles -->
+      <div class="resize-handle resize-handle-right"></div>
+      <div class="resize-handle resize-handle-bottom"></div>
+      <div class="resize-handle resize-handle-corner"></div>
     `;
     
     document.body.appendChild(chatContainer);
+    
+    // Load saved dimensions after container is created
+    this.loadChatDimensions();
   }
 
   bindEvents() {
@@ -154,6 +163,9 @@ class ChatBot {
 
     // Initialize button states
     this.updateSpeakerButton();
+    
+    // Add resize and drag functionality
+    this.addResizeAndDragFunctionality();
   }
 
   toggleChat() {
@@ -187,6 +199,183 @@ class ChatBot {
       speakerBtn.textContent = '🔇';
       speakerBtn.title = 'Voice output disabled (click to enable)';
       speakerBtn.style.color = '#6c757d';
+    }
+  }
+
+  // Resize and Drag Functionality
+  addResizeAndDragFunctionality() {
+    const container = document.getElementById('ducking-ai-container');
+    const header = container.querySelector('.chat-header');
+    
+    // Drag functionality for header
+    this.addDragFunctionality(header, container);
+    
+    // Resize functionality for handles
+    this.addResizeFunctionality(container);
+  }
+  
+  addDragFunctionality(header, container) {
+    let isDragging = false;
+    let startX, startY, startLeft, startTop;
+    
+    header.addEventListener('mousedown', (e) => {
+      // Only drag if clicking on header area, not on buttons
+      if (e.target.closest('.header-controls') || e.target.closest('.resize-indicator')) {
+        return;
+      }
+      
+      isDragging = true;
+      header.classList.add('dragging');
+      
+      startX = e.clientX;
+      startY = e.clientY;
+      
+      const rect = container.getBoundingClientRect();
+      startLeft = rect.left;
+      startTop = rect.top;
+      
+      e.preventDefault();
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+      
+      let newLeft = startLeft + deltaX;
+      let newTop = startTop + deltaY;
+      
+      // Keep within viewport bounds
+      const maxLeft = window.innerWidth - container.offsetWidth;
+      const maxTop = window.innerHeight - container.offsetHeight;
+      
+      newLeft = Math.max(10, Math.min(newLeft, maxLeft));
+      newTop = Math.max(10, Math.min(newTop, maxTop));
+      
+      container.style.left = `${newLeft}px`;
+      container.style.top = `${newTop}px`;
+      container.style.right = 'auto';
+      container.style.bottom = 'auto';
+    });
+    
+    document.addEventListener('mouseup', () => {
+      if (isDragging) {
+        isDragging = false;
+        header.classList.remove('dragging');
+        this.saveChatPosition();
+      }
+    });
+  }
+  
+  addResizeFunctionality(container) {
+    const rightHandle = container.querySelector('.resize-handle-right');
+    const bottomHandle = container.querySelector('.resize-handle-bottom');
+    const cornerHandle = container.querySelector('.resize-handle-corner');
+    
+    // Right edge resizing
+    this.addResizeHandle(rightHandle, container, 'width');
+    
+    // Bottom edge resizing
+    this.addResizeHandle(bottomHandle, container, 'height');
+    
+    // Corner resizing (both width and height)
+    this.addResizeHandle(cornerHandle, container, 'both');
+  }
+  
+  addResizeHandle(handle, container, direction) {
+    let isResizing = false;
+    let startX, startY, startWidth, startHeight;
+    
+    handle.addEventListener('mousedown', (e) => {
+      isResizing = true;
+      container.classList.add('resizing');
+      
+      startX = e.clientX;
+      startY = e.clientY;
+      startWidth = parseInt(getComputedStyle(container).width, 10);
+      startHeight = parseInt(getComputedStyle(container).height, 10);
+      
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing) return;
+      
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+      
+      if (direction === 'width' || direction === 'both') {
+        const newWidth = Math.max(300, Math.min(800, startWidth + deltaX));
+        container.style.width = `${newWidth}px`;
+      }
+      
+      if (direction === 'height' || direction === 'both') {
+        const newHeight = Math.max(400, Math.min(window.innerHeight * 0.8, startHeight + deltaY));
+        container.style.height = `${newHeight}px`;
+      }
+    });
+    
+    document.addEventListener('mouseup', () => {
+      if (isResizing) {
+        isResizing = false;
+        container.classList.remove('resizing');
+        this.saveChatDimensions();
+      }
+    });
+  }
+  
+  // Save and load chat dimensions and position
+  saveChatDimensions() {
+    const container = document.getElementById('ducking-ai-container');
+    const dimensions = {
+      width: container.style.width,
+      height: container.style.height,
+      timestamp: Date.now()
+    };
+    localStorage.setItem('stevens-ai-chat-dimensions', JSON.stringify(dimensions));
+  }
+  
+  saveChatPosition() {
+    const container = document.getElementById('ducking-ai-container');
+    const position = {
+      left: container.style.left,
+      top: container.style.top,
+      right: container.style.right,
+      bottom: container.style.bottom,
+      timestamp: Date.now()
+    };
+    localStorage.setItem('stevens-ai-chat-position', JSON.stringify(position));
+  }
+  
+  loadChatDimensions() {
+    try {
+      const savedDimensions = localStorage.getItem('stevens-ai-chat-dimensions');
+      const savedPosition = localStorage.getItem('stevens-ai-chat-position');
+      
+      if (savedDimensions) {
+        const dimensions = JSON.parse(savedDimensions);
+        const container = document.getElementById('ducking-ai-container');
+        
+        if (dimensions.width) container.style.width = dimensions.width;
+        if (dimensions.height) container.style.height = dimensions.height;
+      }
+      
+      if (savedPosition) {
+        const position = JSON.parse(savedPosition);
+        const container = document.getElementById('ducking-ai-container');
+        
+        // Only apply saved position if all required values exist
+        if (position.left && position.top) {
+          container.style.left = position.left;
+          container.style.top = position.top;
+          container.style.right = 'auto';
+          container.style.bottom = 'auto';
+        }
+      }
+    } catch (error) {
+      console.log('Failed to load chat preferences:', error);
     }
   }
 
@@ -443,6 +632,161 @@ class ChatBot {
         </div>
       </div>
     `;
+  }
+
+  // Grades Rendering
+  renderGradesCards(structuredResponse) {
+    const messageId = `grades-${this.messageIdCounter++}`;
+    const { message, data, suggestions } = structuredResponse;
+    
+    let html = `
+      <div class="message bot" data-message-id="${messageId}">
+        <div class="bot-avatar" style="background-color: #8B0000; color: white; display: flex; justify-content: center; align-items: center;">S</div>
+        <div class="message-content">
+          <div class="grades-response">
+            <p class="response-message">${this.escapeHtml(message)}</p>
+    `;
+
+    // Add grades summary
+    if (data.summary) {
+      const { total_courses, graded_assignments, total_assignments, average_score } = data.summary;
+      html += `
+        <div class="grades-summary">
+          <div class="summary-stats">
+            <div class="stat-item courses">${total_courses} Course${total_courses !== 1 ? 's' : ''}</div>
+            <div class="stat-item assignments">${graded_assignments}/${total_assignments} Graded</div>
+            ${average_score !== null ? `<div class="stat-item average">Avg: ${average_score.toFixed(1)}%</div>` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    // Add course grades
+    if (data.courses && data.courses.length > 0) {
+      data.courses.forEach(course => {
+        html += `
+          <div class="course-section">
+            <div class="course-header">
+              <h3 class="course-title">${this.escapeHtml(course.course_name)}</h3>
+        `;
+
+        // Course grade
+        if (course.current_grade) {
+          const gradeDisplay = this.getGradeDisplay(course.current_grade);
+          html += `<div class="course-grade ${gradeDisplay.class}">${gradeDisplay.text}</div>`;
+        }
+
+        html += `</div>`;
+
+        // Assignments grades
+        if (course.assignments && course.assignments.length > 0) {
+          html += `<div class="grades-grid">`;
+          
+          course.assignments.forEach(assignment => {
+            const statusIcon = this.getGradeStatusIcon(assignment.workflow_state);
+            const percentage = assignment.percentage !== null ? `${assignment.percentage.toFixed(1)}%` : 'N/A';
+            
+            html += `
+              <div class="grade-card ${assignment.workflow_state}">
+                <div class="grade-header">
+                  <span class="assignment-name">${this.escapeHtml(assignment.name)}</span>
+                  <span class="grade-status">${statusIcon}</span>
+                </div>
+                <div class="grade-details">
+                  <div class="grade-score">
+                    ${assignment.score !== null ? assignment.score : 'N/A'} / ${assignment.points_possible}
+                    <span class="grade-percentage">(${percentage})</span>
+                  </div>
+                  <div class="grade-dates">
+                    ${assignment.submitted_at ? `Submitted: ${new Date(assignment.submitted_at).toLocaleDateString()}` : 'Not submitted'}
+                  </div>
+                </div>
+                ${assignment.html_url ? `
+                  <div class="assignment-actions">
+                    <a href="${assignment.html_url}" target="_blank" class="btn-primary">View Assignment</a>
+                  </div>
+                ` : ''}
+              </div>
+            `;
+          });
+          
+          html += `</div>`;
+        } else {
+          html += `
+            <div class="no-grades-text">
+              <p>No graded assignments found for this course.</p>
+              <div class="course-link">
+                <a href="${course.canvas_course_url}" target="_blank" class="btn-primary">View Course on Canvas</a>
+              </div>
+            </div>
+          `;
+        }
+
+        html += `</div>`; // End course-section
+      });
+    }
+
+    // Add suggestions
+    if (suggestions && suggestions.length > 0) {
+      html += `
+        <div class="suggestions-section">
+          <p class="suggestions-title">💡 What else can I help with?</p>
+          <div class="suggestions-grid">
+      `;
+      
+      suggestions.forEach(suggestion => {
+        html += `<button class="suggestion-btn" data-suggestion="${this.escapeHtml(suggestion)}">${this.escapeHtml(suggestion)}</button>`;
+      });
+      
+      html += `
+          </div>
+        </div>
+      `;
+    }
+
+    html += `
+          </div>
+          <div class="message-controls">
+            <button class="control-btn speaker-control" data-message-id="${messageId}" title="Read aloud">
+              <span class="speaker-icon">🔊</span>
+            </button>
+            <button class="control-btn copy-control" data-message-id="${messageId}" title="Copy message">
+              <span class="copy-icon">📋</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    return html;
+  }
+
+  // Helper functions for grades display
+  getGradeDisplay(currentGrade) {
+    if (!currentGrade || currentGrade === 'N/A') {
+      return { text: 'N/A', class: 'grade-na' };
+    }
+    
+    const grade = currentGrade.toString().toUpperCase();
+    
+    if (grade.includes('A')) return { text: grade, class: 'grade-a' };
+    if (grade.includes('B')) return { text: grade, class: 'grade-b' };
+    if (grade.includes('C')) return { text: grade, class: 'grade-c' };
+    if (grade.includes('D')) return { text: grade, class: 'grade-d' };
+    if (grade.includes('F')) return { text: grade, class: 'grade-f' };
+    
+    return { text: grade, class: 'grade-default' };
+  }
+
+  getGradeStatusIcon(workflowState) {
+    switch (workflowState) {
+      case 'graded': return '✅';
+      case 'submitted': return '📝';
+      case 'unsubmitted': return '❌';
+      case 'pending_review': return '⏳';
+      case 'ungraded': return '📋';
+      default: return '❓';
+    }
   }
 
   // Helper method: Render course comparison for structured course comparison data
@@ -1023,6 +1367,10 @@ class ChatBot {
           // Render announcements cards
           console.log('📢 Rendering announcements cards');
           botMessageHtml = this.renderAnnouncementsCards(structuredResponse);
+        } else if (structuredResponse.response_type === 'grades') {
+          // Render grades cards
+          console.log('📊 Rendering grades cards');
+          botMessageHtml = this.renderGradesCards(structuredResponse);
         } else if (structuredResponse.response_type === 'course_comparison') {
           // Render course comparison
           console.log('🔍 Rendering course comparison');
