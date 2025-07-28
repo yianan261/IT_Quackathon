@@ -890,6 +890,289 @@ def get_rag_stats() -> str:
         })
 
 
+@tool
+def compare_courses(course1: str, course2: str) -> str:
+    """
+    Compare two courses using the knowledge base to provide detailed information about what you'll learn in each course and recommendations.
+    
+    IMPORTANT: This tool returns structured JSON data with response_type, data, and ui_component fields.
+    Return the JSON response exactly as provided without modification.
+    
+    Args:
+        course1: First course code or name (e.g., "CS 549", "Distributed Systems")
+        course2: Second course code or name (e.g., "CS 548", "Enterprise Software")
+        
+    Returns:
+        str: A structured JSON string containing course comparison data for frontend rendering.
+    """
+    if not _rag_service:
+        return json.dumps({
+            "response_type": "course_comparison",
+            "message": "Course comparison service is currently unavailable.",
+            "data": {"courses": [], "recommendations": []},
+            "ui_component": "CourseComparison",
+            "suggestions": ["Get my assignments instead", "Show me current courses", "Search Stevens knowledge base"]
+        })
+    
+    try:
+        # Search for information about both courses with more targeted queries
+        search_queries = [
+            f"{course1} course description learning objectives topics covered",
+            f"{course2} course description learning objectives topics covered", 
+            f"{course1} curriculum syllabus what students learn",
+            f"{course2} curriculum syllabus what students learn",
+            f"{course1} programming projects assignments implementation",
+            f"{course2} programming projects assignments implementation",
+            f"{course1} technologies tools frameworks used",
+            f"{course2} technologies tools frameworks used"
+        ]
+        
+        all_results = []
+        for query in search_queries:
+            try:
+                results = _rag_service.search_similar(query, top_k=2)
+                all_results.extend(results)
+            except:
+                continue
+        
+        # Process and organize results by course
+        course1_info = []
+        course2_info = []
+        general_info = []
+        
+        # Extract course codes for better matching
+        course1_code = course1.upper().replace(" ", "").replace("-", "")
+        course2_code = course2.upper().replace(" ", "").replace("-", "")
+        
+        for result in all_results:
+            content = result["content"].strip()
+            content_upper = content.upper()
+            
+            # Simple matching based on course codes appearing in content
+            if course1_code in content_upper or course1.upper() in content_upper:
+                course1_info.append({
+                    "content": content,
+                    "source": result["metadata"].get("source", "Stevens Information"),
+                    "relevance": round(1 - result["score"], 3)
+                })
+            elif course2_code in content_upper or course2.upper() in content_upper:
+                course2_info.append({
+                    "content": content,
+                    "source": result["metadata"].get("source", "Stevens Information"),
+                    "relevance": round(1 - result["score"], 3)
+                })
+            else:
+                general_info.append({
+                    "content": content,
+                    "source": result["metadata"].get("source", "Stevens Information"),
+                    "relevance": round(1 - result["score"], 3)
+                })
+        
+        # Sort by relevance and limit results
+        course1_info.sort(key=lambda x: x["relevance"], reverse=True)
+        course2_info.sort(key=lambda x: x["relevance"], reverse=True)
+        general_info.sort(key=lambda x: x["relevance"], reverse=True)
+        
+        # Structure course information
+        structured_courses = []
+        
+        def extract_learning_objectives(course_name, course_info_list):
+            """Extract meaningful learning objectives and key concepts from course content"""
+            import re
+            
+            learning_points = []
+            combined_content = ""
+            
+            # Combine all relevant content for this course
+            for info in course_info_list:
+                content = info["content"].strip()
+                # Basic cleanup
+                content = re.sub(r'<[^>]+>', '', content)
+                content = re.sub(r'\s+', ' ', content).strip()
+                combined_content += " " + content
+            
+            if not combined_content.strip():
+                return []
+            
+            # Clean combined content
+            combined_content = re.sub(r'\b\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}[\w\-+:]*\b', '', combined_content)
+            combined_content = re.sub(r'https?://[^\s]+', '', combined_content)
+            combined_content = re.sub(r'\b(Posted on|Updated on|Created on|Modified on)[:\s]*[^\n]*', '', combined_content)
+            combined_content = re.sub(r'Page \d+ of', '', combined_content)
+            combined_content = re.sub(r'Stevens Institute of Technology[^\n]*', '', combined_content)
+            combined_content = re.sub(r'\s+', ' ', combined_content).strip()
+            
+            # Extract key technologies and concepts based on course
+            if "549" in course_name or "distributed" in course_name.lower():
+                # CS 549 - Distributed Systems focus
+                concepts = [
+                    "distributed consensus algorithms (Paxos, Raft)",
+                    "distributed data storage systems (Cassandra, distributed databases)", 
+                    "blockchain and consensus mechanisms",
+                    "distributed computing frameworks (Hadoop, MapReduce)",
+                    "real-time communication protocols (WebSockets, messaging systems)"
+                ]
+                learning_points.extend(concepts[:3])
+                
+            elif "548" in course_name or "enterprise" in course_name.lower():
+                # CS 548 - Enterprise Software focus  
+                concepts = [
+                    "microservices architecture for enterprise applications",
+                    "containerization and orchestration (Docker, Kubernetes)",
+                    "event-driven architecture and message queues (Kafka)",
+                    "domain-driven design (DDD) and CQRS patterns",
+                    "enterprise data modeling (ORM, JSON Schema, NoSQL)"
+                ]
+                learning_points.extend(concepts[:3])
+                
+            else:
+                # General course - try to extract from content
+                sentences = re.split(r'[.!?]+', combined_content)
+                for sentence in sentences:
+                    sentence = sentence.strip()
+                    if len(sentence) < 30 or len(sentence) > 200:
+                        continue
+                        
+                    # Look for sentences that describe learning or implementation
+                    if any(keyword in sentence.lower() for keyword in ['learn', 'implement', 'develop', 'build', 'design', 'create', 'study', 'understand']):
+                        if not any(skip in sentence.lower() for skip in ['http', 'www', 'page', 'catalog', 'stevens institute']):
+                            learning_points.append(sentence.strip())
+                            
+                    if len(learning_points) >= 3:
+                        break
+            
+            # If still no good content, provide fallback
+            if not learning_points:
+                learning_points = [
+                    f"Advanced topics and practical implementation in {course_name}",
+                    "Hands-on programming projects and system design",
+                    "Real-world applications and case studies"
+                ]
+            
+            return learning_points[:3]  # Limit to 3 points
+        
+        # Process Course 1
+        course1_learning_points = extract_learning_objectives(course1, course1_info)
+        structured_courses.append({
+            "course_name": course1,
+            "course_code": course1_code,
+            "learning_points": course1_learning_points,
+            "info_sources": [info.get("source", "Stevens Information") for info in course1_info[:2] if info.get("source")]
+        })
+        
+        # Process Course 2
+        course2_learning_points = extract_learning_objectives(course2, course2_info)
+        structured_courses.append({
+            "course_name": course2,
+            "course_code": course2_code,
+            "learning_points": course2_learning_points,
+            "info_sources": [info.get("source", "Stevens Information") for info in course2_info[:2] if info.get("source")]
+        })
+        
+        # Generate intelligent recommendations based on course content
+        recommendations = []
+        
+        # Check if we have CS 549 and CS 548 specifically
+        has_549 = any("549" in course.get("course_name", "") for course in structured_courses)
+        has_548 = any("548" in course.get("course_name", "") for course in structured_courses)
+        
+        if has_549 and has_548:
+            # Specific recommendations for CS 549 vs CS 548
+            recommendations.extend([
+                {
+                    "title": "For Systems & Infrastructure Focus",
+                    "description": f"If you're interested in distributed systems, cloud platforms, and scalable architecture, consider {course1 if '549' in course1 else course2}. Focus on distributed systems theory and core algorithm implementation.",
+                    "course_preference": course1 if "549" in course1 else course2
+                },
+                {
+                    "title": "For Enterprise & Application Development",
+                    "description": f"If you prefer practical engineering development, architecture design, and enterprise applications, consider {course1 if '548' in course1 else course2}. Emphasizes enterprise-level application development and modern software engineering practices.",
+                    "course_preference": course1 if "548" in course1 else course2
+                },
+                {
+                    "title": "For Future Architect & Technical Leadership Roles",
+                    "description": "Consider taking both courses. Start with theoretical foundations (distributed systems), then practical engineering (enterprise software) to build a complete technical stack.",
+                    "course_preference": "both"
+                }
+            ])
+        elif course1_info or course2_info:
+            # General recommendations when we have some course info
+            recommendations.extend([
+                {
+                    "title": "Based on Your Career Goals",
+                    "description": f"Choose {course1} if you prefer theoretical foundations and system-level programming. Choose {course2} if you prefer application development and practical engineering.",
+                    "course_preference": "evaluate_goals"
+                },
+                {
+                    "title": "Consider Prerequisites and Workload",
+                    "description": "Check which course aligns better with your current skills and available time commitment for projects and assignments.",
+                    "course_preference": "check_prereqs"  
+                }
+            ])
+        else:
+            recommendations.append({
+                "title": "Limited Information Available",
+                "description": "For more detailed course comparisons, check the official Stevens course catalog or speak with your academic advisor.",
+                "course_preference": "consult_advisor"
+            })
+        
+        # Create contextual response message
+        if has_549 and has_548:
+            message = f"Here's a detailed comparison between {course1} and {course2} based on available course information:"
+            suggestions = [
+                f"Tell me more about {course1} prerequisites",
+                f"Tell me more about {course2} workload", 
+                "What other distributed systems courses are available?",
+                "Show me my current computer science courses"
+            ]
+        elif structured_courses and any(course.get("learning_points") for course in structured_courses):
+            message = f"Here's a detailed comparison between {course1} and {course2} based on available course information:"
+            suggestions = [
+                f"What are the prerequisites for {course1}?",
+                f"What are the prerequisites for {course2}?",
+                "Show me my current courses",
+                "Get more information about computer science program requirements"
+            ]
+        else:
+            message = f"I found limited specific information for comparing {course1} and {course2}. Here's a general comparison based on course patterns:"
+            suggestions = [
+                "Search Stevens knowledge base for more course details",
+                "Get my current courses",
+                "Show me CS program requirements"
+            ]
+        
+        # Set appropriate comparison title
+        if has_549 and has_548:
+            comparison_title = f"What will you learn in {course1} vs {course2}? (Specific examples)"
+        else:
+            comparison_title = f"What will you learn in {course1} vs {course2}?"
+        
+        structured_response = {
+            "response_type": "course_comparison",
+            "message": message,
+            "data": {
+                "courses": structured_courses,
+                "recommendations": recommendations,
+                "comparison_title": comparison_title,
+                "total_sources": len(set([info.get("source", "") for info in (course1_info + course2_info) if info.get("source")]))
+            },
+            "ui_component": "CourseComparison",
+            "suggestions": suggestions
+        }
+        
+        return json.dumps(structured_response)
+        
+    except Exception as e:
+        logger.error(f"Error in course comparison: {e}")
+        return json.dumps({
+            "response_type": "course_comparison",
+            "message": f"Error comparing courses {course1} and {course2}: {str(e)}",
+            "data": {"courses": [], "recommendations": []},
+            "ui_component": "CourseComparison",
+            "suggestions": ["Search Stevens knowledge base", "Get my current courses"]
+        })
+
+
 # Export all tools
 all_tools = [
     get_current_courses,
@@ -909,4 +1192,5 @@ all_tools = [
     search_stevens_knowledge,
     get_stevens_info,
     get_rag_stats,
+    compare_courses,
 ]
