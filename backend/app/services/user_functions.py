@@ -349,14 +349,15 @@ def get_academic_calendar_event(event_type: str) -> str:
 
 
 @tool
-def navigate_to_workday_registration(mock_mode: bool = False, stay_open: bool = False) -> str:
+def navigate_to_workday_registration(mock_mode: bool = False, stay_open: bool = True) -> str:
     """
     Navigate to the course registration page in Workday.
     This will open a browser and prompt you to enter your credentials if not already logged in.
+    The browser will remain open by default so you can register for courses.
     
     Args:
         mock_mode: Use mock mode for testing without Playwright installed
-        stay_open: Keep the browser open after navigation
+        stay_open: Keep the browser open after navigation (default: True)
         
     Returns:
         str: A JSON string containing navigation results.
@@ -379,8 +380,13 @@ def navigate_to_workday_registration(mock_mode: bool = False, stay_open: bool = 
                 ) if result["success"] else "❌ I couldn't navigate to the registration page."
             }
             
+            # For course registration, we generally want to keep the browser open
+            # so users can actually register for courses
             if not stay_open:
-                await service.close()
+                print("[DEBUG] Browser close requested, but keeping open for course registration")
+                # await service.close()  # Commented out to keep browser open
+            else:
+                print("[DEBUG] Keeping browser open for course registration")
 
             print("[DEBUG] Tool result returned to agent:", json.dumps(final_result))
             return json.dumps(final_result)
@@ -659,7 +665,7 @@ all_tools = [
     get_grades_for_course,
     get_announcements_for_all_courses,
     get_announcements_for_specific_courses,
-    get_program_requirements,
+    
     get_academic_calendar_event,
     navigate_to_workday_registration,
     navigate_to_workday_financial_account,

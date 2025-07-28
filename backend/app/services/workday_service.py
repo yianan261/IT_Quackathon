@@ -279,12 +279,9 @@ class WorkdayService:
                 await self.page.wait_for_timeout(2000)
                 await self.page.screenshot(path=screenshot_path)
 
-                if not stay_open:
-                    print("[DEBUG] Delaying close for 10 sec (demo mode)")
-                    await asyncio.sleep(10)  # Delay for demo purposes
-                    await self.close()
-                else:
-                    print("[DEBUG] Leaving browser open (stay_open=True)")
+                # Keep browser open for course registration to allow users to register
+                print("[DEBUG] Keeping browser open for course registration (stay_open=True)")
+                # Note: Browser will remain open so users can complete their course registration
 
                 return {
                     "success": True,
