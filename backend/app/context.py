@@ -1,5 +1,5 @@
 from functools import lru_cache
-from app.db.database import get_cosmos_database
+# from app.db.database import get_cosmos_database
 from app.services.stevens_service import StevensService
 from app.services.canvas_service import CanvasService
 from typing import AsyncGenerator
@@ -14,8 +14,8 @@ def get_services(cosmos_db):
     }
 
 
-async def get_service_context() -> AsyncGenerator[dict, None]:
-    """Dependency that provides service instances"""
-    cosmos_db = await get_cosmos_database()
-    services = get_services(cosmos_db)
-    yield services
+# async def get_service_context() -> AsyncGenerator[dict, None]:
+#     """Dependency that provides service instances"""
+#     cosmos_db = await get_cosmos_database()
+#     services = get_services(cosmos_db)
+#     yield services

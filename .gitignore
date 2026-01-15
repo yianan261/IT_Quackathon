@@ -22,3 +22,5 @@ __pycache__/
 chrome_profile/
 # Ignore Chrome profile cache and session data
 backend/app/services/chrome_profile/
+DuckingAI.zip
+backend/documents/

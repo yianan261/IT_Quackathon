@@ -4,7 +4,14 @@ const { ALLOWED_DOMAINS = ['localhost:8000', 'login.stevens.edu'], API_ENDPOINT 
 class ChatBot {
   constructor() {
     this.isOpen = false;
+    this.isRecording = false;
+    this.recognition = null;
+    this.speechSynthesis = window.speechSynthesis;
+    this.voiceOutputEnabled = false; // Users can toggle this
+    this.currentSpeakingMessageId = null; // Track which message is currently being spoken
+    this.messageIdCounter = 0; // Counter for unique message IDs
     this.init();
+    this.initVoice();
   }
 
   init() {
@@ -38,30 +45,59 @@ class ChatBot {
           <span></span>
         </div>
         <h2>Stevens AI Assistant</h2>
+        <div class="resize-indicator">⊞</div>
         <div class="header-controls">
+          <button class="speaker-btn" title="Toggle voice output">🔇</button>
           <button class="minimize-btn">−</button>
           <button class="close-btn">×</button>
         </div>
       </div>
       <div class="chat-body">
         <div class="chat-messages">
-          <div class="message bot">
+          <div class="message bot" data-message-id="welcome-msg">
             <div class="bot-avatar" style="background-color: #8B0000; color: white; display: flex; justify-content: center; align-items: center;">S</div>
             <div class="message-content">
               <p>Hi, I'm your Stevens AI Assistant! I'm here to help answer your questions about Stevens Institute of Technology.</p>
+              <div class="suggestions-section">
+                <p class="suggestions-title">💡 Try asking:</p>
+                <div class="suggestions-grid">
+                  <button class="suggestion-btn" data-suggestion="Give me upcoming assignments">📝 Give me upcoming assignments</button>
+                  <button class="suggestion-btn" data-suggestion="Show me my current courses">📚 Show me my current courses</button>
+                  <button class="suggestion-btn" data-suggestion="Help me register for courses">🎓 Help me register for courses</button>
+                </div>
+              </div>
+              <div class="message-controls">
+                <button class="control-btn speaker-control" data-message-id="welcome-msg" title="Read aloud">
+                  <span class="speaker-icon">🔊</span>
+                </button>
+                <button class="control-btn copy-control" data-message-id="welcome-msg" title="Copy message">
+                  <span class="copy-icon">📋</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
         <div class="chat-input">
           <input type="text" placeholder="Ask me a question">
+          <button class="voice-btn" title="Voice input">
+            <span style="color: #8B0000;">🎤</span>
+          </button>
           <button class="send-btn">
             <span style="color: white;">↑</span>
           </button>
         </div>
       </div>
+      
+      <!-- Resize Handles -->
+      <div class="resize-handle resize-handle-right"></div>
+      <div class="resize-handle resize-handle-bottom"></div>
+      <div class="resize-handle resize-handle-corner"></div>
     `;
     
     document.body.appendChild(chatContainer);
+    
+    // Load saved dimensions after container is created
+    this.loadChatDimensions();
   }
 
   bindEvents() {
@@ -76,6 +112,10 @@ class ChatBot {
     // Close button
     const closeBtn = document.querySelector('.close-btn');
     closeBtn.addEventListener('click', () => this.closeChat());
+
+    // Speaker toggle button
+    const speakerBtn = document.querySelector('.speaker-btn');
+    speakerBtn.addEventListener('click', () => this.toggleVoiceOutput());
 
     // Send message
     const input = document.querySelector('.chat-input input');
@@ -95,6 +135,37 @@ class ChatBot {
         sendMessage();
       }
     });
+
+    // Event delegation for suggestion buttons (they're added dynamically)
+    const messagesContainer = document.querySelector('.chat-messages');
+    messagesContainer.addEventListener('click', (e) => {
+      if (e.target.classList.contains('suggestion-btn')) {
+        const suggestion = e.target.getAttribute('data-suggestion');
+        this.handleSuggestionClick(suggestion);
+      }
+      
+      // Handle speaker control buttons
+      if (e.target.closest('.speaker-control')) {
+        const messageId = e.target.closest('.speaker-control').getAttribute('data-message-id');
+        this.toggleMessageSpeech(messageId);
+      }
+      
+      // Handle copy control buttons
+      if (e.target.closest('.copy-control')) {
+        const messageId = e.target.closest('.copy-control').getAttribute('data-message-id');
+        this.copyMessage(messageId);
+      }
+    });
+
+    // Voice button
+    const voiceBtn = document.querySelector('.voice-btn');
+    voiceBtn.addEventListener('click', () => this.toggleVoiceRecording());
+
+    // Initialize button states
+    this.updateSpeakerButton();
+    
+    // Add resize and drag functionality
+    this.addResizeAndDragFunctionality();
   }
 
   toggleChat() {
@@ -107,6 +178,205 @@ class ChatBot {
     const container = document.getElementById('ducking-ai-container');
     this.isOpen = false;
     container.classList.add('chat-closed');
+  }
+
+  // Toggle voice output
+  toggleVoiceOutput() {
+    this.voiceOutputEnabled = !this.voiceOutputEnabled;
+    this.updateSpeakerButton();
+    console.log('🔊 Voice output:', this.voiceOutputEnabled ? 'enabled' : 'disabled');
+  }
+
+  // Update speaker button appearance
+  updateSpeakerButton() {
+    const speakerBtn = document.querySelector('.speaker-btn');
+    
+    if (this.voiceOutputEnabled) {
+      speakerBtn.textContent = '🔊';
+      speakerBtn.title = 'Voice output enabled (click to disable)';
+      speakerBtn.style.color = '#8B0000';
+    } else {
+      speakerBtn.textContent = '🔇';
+      speakerBtn.title = 'Voice output disabled (click to enable)';
+      speakerBtn.style.color = '#6c757d';
+    }
+  }
+
+  // Resize and Drag Functionality
+  addResizeAndDragFunctionality() {
+    const container = document.getElementById('ducking-ai-container');
+    const header = container.querySelector('.chat-header');
+    
+    // Drag functionality for header
+    this.addDragFunctionality(header, container);
+    
+    // Resize functionality for handles
+    this.addResizeFunctionality(container);
+  }
+  
+  addDragFunctionality(header, container) {
+    let isDragging = false;
+    let startX, startY, startLeft, startTop;
+    
+    header.addEventListener('mousedown', (e) => {
+      // Only drag if clicking on header area, not on buttons
+      if (e.target.closest('.header-controls') || e.target.closest('.resize-indicator')) {
+        return;
+      }
+      
+      isDragging = true;
+      header.classList.add('dragging');
+      
+      startX = e.clientX;
+      startY = e.clientY;
+      
+      const rect = container.getBoundingClientRect();
+      startLeft = rect.left;
+      startTop = rect.top;
+      
+      e.preventDefault();
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+      
+      let newLeft = startLeft + deltaX;
+      let newTop = startTop + deltaY;
+      
+      // Keep within viewport bounds
+      const maxLeft = window.innerWidth - container.offsetWidth;
+      const maxTop = window.innerHeight - container.offsetHeight;
+      
+      newLeft = Math.max(10, Math.min(newLeft, maxLeft));
+      newTop = Math.max(10, Math.min(newTop, maxTop));
+      
+      container.style.left = `${newLeft}px`;
+      container.style.top = `${newTop}px`;
+      container.style.right = 'auto';
+      container.style.bottom = 'auto';
+    });
+    
+    document.addEventListener('mouseup', () => {
+      if (isDragging) {
+        isDragging = false;
+        header.classList.remove('dragging');
+        this.saveChatPosition();
+      }
+    });
+  }
+  
+  addResizeFunctionality(container) {
+    const rightHandle = container.querySelector('.resize-handle-right');
+    const bottomHandle = container.querySelector('.resize-handle-bottom');
+    const cornerHandle = container.querySelector('.resize-handle-corner');
+    
+    // Right edge resizing
+    this.addResizeHandle(rightHandle, container, 'width');
+    
+    // Bottom edge resizing
+    this.addResizeHandle(bottomHandle, container, 'height');
+    
+    // Corner resizing (both width and height)
+    this.addResizeHandle(cornerHandle, container, 'both');
+  }
+  
+  addResizeHandle(handle, container, direction) {
+    let isResizing = false;
+    let startX, startY, startWidth, startHeight;
+    
+    handle.addEventListener('mousedown', (e) => {
+      isResizing = true;
+      container.classList.add('resizing');
+      
+      startX = e.clientX;
+      startY = e.clientY;
+      startWidth = parseInt(getComputedStyle(container).width, 10);
+      startHeight = parseInt(getComputedStyle(container).height, 10);
+      
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing) return;
+      
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+      
+      if (direction === 'width' || direction === 'both') {
+        const newWidth = Math.max(300, Math.min(800, startWidth + deltaX));
+        container.style.width = `${newWidth}px`;
+      }
+      
+      if (direction === 'height' || direction === 'both') {
+        const newHeight = Math.max(400, Math.min(window.innerHeight * 0.8, startHeight + deltaY));
+        container.style.height = `${newHeight}px`;
+      }
+    });
+    
+    document.addEventListener('mouseup', () => {
+      if (isResizing) {
+        isResizing = false;
+        container.classList.remove('resizing');
+        this.saveChatDimensions();
+      }
+    });
+  }
+  
+  // Save and load chat dimensions and position
+  saveChatDimensions() {
+    const container = document.getElementById('ducking-ai-container');
+    const dimensions = {
+      width: container.style.width,
+      height: container.style.height,
+      timestamp: Date.now()
+    };
+    localStorage.setItem('stevens-ai-chat-dimensions', JSON.stringify(dimensions));
+  }
+  
+  saveChatPosition() {
+    const container = document.getElementById('ducking-ai-container');
+    const position = {
+      left: container.style.left,
+      top: container.style.top,
+      right: container.style.right,
+      bottom: container.style.bottom,
+      timestamp: Date.now()
+    };
+    localStorage.setItem('stevens-ai-chat-position', JSON.stringify(position));
+  }
+  
+  loadChatDimensions() {
+    try {
+      const savedDimensions = localStorage.getItem('stevens-ai-chat-dimensions');
+      const savedPosition = localStorage.getItem('stevens-ai-chat-position');
+      
+      if (savedDimensions) {
+        const dimensions = JSON.parse(savedDimensions);
+        const container = document.getElementById('ducking-ai-container');
+        
+        if (dimensions.width) container.style.width = dimensions.width;
+        if (dimensions.height) container.style.height = dimensions.height;
+      }
+      
+      if (savedPosition) {
+        const position = JSON.parse(savedPosition);
+        const container = document.getElementById('ducking-ai-container');
+        
+        // Only apply saved position if all required values exist
+        if (position.left && position.top) {
+          container.style.left = position.left;
+          container.style.top = position.top;
+          container.style.right = 'auto';
+          container.style.bottom = 'auto';
+        }
+      }
+    } catch (error) {
+      console.log('Failed to load chat preferences:', error);
+    }
   }
 
   // Helper method: Escape HTML special characters
@@ -134,6 +404,891 @@ class ChatBot {
       return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
     });
   }
+
+  // Helper method: Render assignment cards for structured assignment data
+  renderAssignmentCards(structuredResponse) {
+    const { data, message, suggestions } = structuredResponse;
+    const { courses, summary } = data;
+    
+    // Build the summary header
+    let summaryHtml = '';
+    if (summary) {
+      summaryHtml = `
+        <div class="assignment-summary">
+          <div class="summary-stats">
+            <span class="stat-item">📝 Total: ${summary.total_assignments}</span>
+            <span class="stat-item high-priority">🔥 High: ${summary.high_priority}</span>
+            <span class="stat-item medium-priority">⚡ Medium: ${summary.medium_priority}</span>
+          </div>
+        </div>
+      `;
+    }
+    
+    // Build assignment cards for each course
+    let coursesHtml = '';
+    courses.forEach(course => {
+      const assignments = course.assignments || [];
+      
+      let assignmentsHtml = '';
+      assignments.forEach(assignment => {
+        const priorityClass = `priority-${assignment.priority}`;
+        const dueDate = new Date(assignment.due_datetime);
+        const formattedDate = dueDate.toLocaleDateString();
+        const formattedTime = dueDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        
+        assignmentsHtml += `
+          <div class="assignment-card ${priorityClass}">
+            <div class="assignment-header">
+              <h4 class="assignment-name">${this.escapeHtml(assignment.name)}</h4>
+              <span class="priority-badge ${priorityClass}">${assignment.priority.toUpperCase()}</span>
+            </div>
+            <div class="assignment-details">
+              <div class="due-date">
+                📅 Due: ${formattedDate} at ${formattedTime}
+              </div>
+              ${assignment.points_possible ? `<div class="points">💯 Points: ${assignment.points_possible}</div>` : ''}
+              <div class="assignment-actions">
+                <a href="${assignment.details_url}" target="_blank" class="btn-primary">View Details</a>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+      
+      coursesHtml += `
+        <div class="course-section">
+          <h3 class="course-title">${this.escapeHtml(course.course_name)}</h3>
+          <div class="assignments-grid">
+            ${assignmentsHtml}
+          </div>
+        </div>
+      `;
+    });
+    
+    // Build suggestions buttons if available
+    let suggestionsHtml = '';
+    if (suggestions && suggestions.length > 0) {
+      const suggestionButtons = suggestions.map((suggestion, index) => 
+        `<button class="suggestion-btn" data-suggestion="${this.escapeHtml(suggestion)}" data-index="${index}">${this.escapeHtml(suggestion)}</button>`
+      ).join('');
+      
+      suggestionsHtml = `
+        <div class="suggestions-section">
+          <p class="suggestions-title">💡 Try asking:</p>
+          <div class="suggestions-grid">
+            ${suggestionButtons}
+          </div>
+        </div>
+      `;
+    }
+    
+    // Generate unique message ID
+    const messageId = `msg-${++this.messageIdCounter}`;
+    
+    // Return the complete message HTML
+    return `
+      <div class="message bot" data-message-id="${messageId}">
+        <div class="bot-avatar" style="background-color: #8B0000; color: white; display: flex; justify-content: center; align-items: center;">S</div>
+        <div class="message-content">
+          <div class="assignments-response">
+            <p class="response-message">${this.escapeHtml(message)}</p>
+            ${summaryHtml}
+            ${coursesHtml}
+            ${suggestionsHtml}
+          </div>
+          <div class="message-controls">
+            <button class="control-btn speaker-control" data-message-id="${messageId}" title="Read aloud">
+              <span class="speaker-icon">🔊</span>
+            </button>
+            <button class="control-btn copy-control" data-message-id="${messageId}" title="Copy message">
+              <span class="copy-icon">📋</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Helper method: Render announcements cards for structured announcement data
+  renderAnnouncementsCards(structuredResponse) {
+    const { data, message, suggestions } = structuredResponse;
+    const { courses, summary } = data;
+    
+    // Build the summary header
+    let summaryHtml = '';
+    if (summary && summary.total_announcements > 0) {
+      summaryHtml = `
+        <div class="announcements-summary">
+          <div class="summary-stats">
+            <span class="stat-item">📢 Total: ${summary.total_announcements}</span>
+            <span class="stat-item recent">🔥 Recent: ${summary.recent_announcements}</span>
+            <span class="stat-item courses">📚 Courses: ${summary.courses_with_announcements}/${summary.total_courses}</span>
+          </div>
+        </div>
+      `;
+    }
+    
+    // Build announcement cards for each course
+    let coursesHtml = '';
+    courses.forEach(course => {
+      const announcements = course.announcements || [];
+      
+      // If course has announcements, show them as cards
+      if (announcements.length > 0) {
+        let announcementsHtml = '';
+        announcements.forEach(announcement => {
+          const postedDate = new Date(announcement.posted_datetime);
+          const formattedDate = postedDate.toLocaleDateString();
+          const formattedTime = postedDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+          const recentClass = announcement.is_recent ? 'recent' : '';
+          
+          announcementsHtml += `
+            <a href="${announcement.url}" target="_blank" class="announcement-card-link">
+              <div class="announcement-card ${recentClass}">
+                <div class="announcement-header">
+                  <h4 class="announcement-title">${this.escapeHtml(announcement.title)}</h4>
+                  ${announcement.is_recent ? '<span class="recent-badge">NEW</span>' : ''}
+                </div>
+                <div class="announcement-meta">
+                  <span class="announcement-author">👤 ${this.escapeHtml(announcement.author)}</span>
+                  <span class="announcement-date">📅 ${formattedDate} at ${formattedTime}</span>
+                </div>
+                <div class="announcement-preview">
+                  <p>${this.escapeHtml(announcement.message_preview)}</p>
+                </div>
+              </div>
+            </a>
+          `;
+        });
+        
+        coursesHtml += `
+          <div class="course-section">
+            <div class="course-header">
+              <h3 class="course-title">${this.escapeHtml(course.course_name)}</h3>
+              <span class="announcement-count">${announcements.length} announcement${announcements.length > 1 ? 's' : ''}</span>
+            </div>
+            <div class="announcements-grid">
+              ${announcementsHtml}
+            </div>
+          </div>
+        `;
+      } else {
+        // Course has no announcements, show link to check directly
+        coursesHtml += `
+          <div class="course-section no-announcements">
+            <div class="course-header">
+              <h3 class="course-title">${this.escapeHtml(course.course_name)}</h3>
+              <span class="no-announcements-text">No recent announcements</span>
+            </div>
+            <div class="course-link">
+              <a href="${course.announcements_link}" target="_blank" class="btn-primary">
+                📢 Check ${course.course_code} Announcements
+              </a>
+            </div>
+          </div>
+        `;
+      }
+    });
+    
+    // Build suggestions buttons if available
+    let suggestionsHtml = '';
+    if (suggestions && suggestions.length > 0) {
+      const suggestionButtons = suggestions.map((suggestion, index) => 
+        `<button class="suggestion-btn" data-suggestion="${this.escapeHtml(suggestion)}" data-index="${index}">${this.escapeHtml(suggestion)}</button>`
+      ).join('');
+      
+      suggestionsHtml = `
+        <div class="suggestions-section">
+          <p class="suggestions-title">💡 Try asking:</p>
+          <div class="suggestions-grid">
+            ${suggestionButtons}
+          </div>
+        </div>
+      `;
+    }
+    
+    // Generate unique message ID
+    const messageId = `msg-${++this.messageIdCounter}`;
+    
+    // Return the complete message HTML
+    return `
+      <div class="message bot" data-message-id="${messageId}">
+        <div class="bot-avatar" style="background-color: #8B0000; color: white; display: flex; justify-content: center; align-items: center;">S</div>
+        <div class="message-content">
+          <div class="announcements-response">
+            <p class="response-message">${this.escapeHtml(message)}</p>
+            ${summaryHtml}
+            ${coursesHtml}
+            ${suggestionsHtml}
+          </div>
+          <div class="message-controls">
+            <button class="control-btn speaker-control" data-message-id="${messageId}" title="Read aloud">
+              <span class="speaker-icon">🔊</span>
+            </button>
+            <button class="control-btn copy-control" data-message-id="${messageId}" title="Copy message">
+              <span class="copy-icon">📋</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Grades Rendering
+  renderGradesCards(structuredResponse) {
+    const messageId = `grades-${this.messageIdCounter++}`;
+    const { message, data, suggestions } = structuredResponse;
+    
+    let html = `
+      <div class="message bot" data-message-id="${messageId}">
+        <div class="bot-avatar" style="background-color: #8B0000; color: white; display: flex; justify-content: center; align-items: center;">S</div>
+        <div class="message-content">
+          <div class="grades-response">
+            <p class="response-message">${this.escapeHtml(message)}</p>
+    `;
+
+    // Add grades summary
+    if (data.summary) {
+      const { total_courses, graded_assignments, total_assignments, average_score } = data.summary;
+      html += `
+        <div class="grades-summary">
+          <div class="summary-stats">
+            <div class="stat-item courses">${total_courses} Course${total_courses !== 1 ? 's' : ''}</div>
+            <div class="stat-item assignments">${graded_assignments}/${total_assignments} Graded</div>
+            ${average_score !== null ? `<div class="stat-item average">Avg: ${average_score.toFixed(1)}%</div>` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    // Add course grades
+    if (data.courses && data.courses.length > 0) {
+      data.courses.forEach(course => {
+        html += `
+          <div class="course-section">
+            <div class="course-header">
+              <h3 class="course-title">${this.escapeHtml(course.course_name)}</h3>
+        `;
+
+        // Course grade
+        if (course.current_grade) {
+          const gradeDisplay = this.getGradeDisplay(course.current_grade);
+          html += `<div class="course-grade ${gradeDisplay.class}">${gradeDisplay.text}</div>`;
+        }
+
+        html += `</div>`;
+
+        // Assignments grades
+        if (course.assignments && course.assignments.length > 0) {
+          html += `<div class="grades-grid">`;
+          
+          course.assignments.forEach(assignment => {
+            const statusIcon = this.getGradeStatusIcon(assignment.workflow_state);
+            const percentage = assignment.percentage !== null ? `${assignment.percentage.toFixed(1)}%` : 'N/A';
+            
+            html += `
+              <div class="grade-card ${assignment.workflow_state}">
+                <div class="grade-header">
+                  <span class="assignment-name">${this.escapeHtml(assignment.name)}</span>
+                  <span class="grade-status">${statusIcon}</span>
+                </div>
+                <div class="grade-details">
+                  <div class="grade-score">
+                    ${assignment.score !== null ? assignment.score : 'N/A'} / ${assignment.points_possible}
+                    <span class="grade-percentage">(${percentage})</span>
+                  </div>
+                  <div class="grade-dates">
+                    ${assignment.submitted_at ? `Submitted: ${new Date(assignment.submitted_at).toLocaleDateString()}` : 'Not submitted'}
+                  </div>
+                </div>
+                ${assignment.html_url ? `
+                  <div class="assignment-actions">
+                    <a href="${assignment.html_url}" target="_blank" class="btn-primary">View Assignment</a>
+                  </div>
+                ` : ''}
+              </div>
+            `;
+          });
+          
+          html += `</div>`;
+        } else {
+          html += `
+            <div class="no-grades-text">
+              <p>No graded assignments found for this course.</p>
+              <div class="course-link">
+                <a href="${course.canvas_course_url}" target="_blank" class="btn-primary">View Course on Canvas</a>
+              </div>
+            </div>
+          `;
+        }
+
+        html += `</div>`; // End course-section
+      });
+    }
+
+    // Add suggestions
+    if (suggestions && suggestions.length > 0) {
+      html += `
+        <div class="suggestions-section">
+          <p class="suggestions-title">💡 What else can I help with?</p>
+          <div class="suggestions-grid">
+      `;
+      
+      suggestions.forEach(suggestion => {
+        html += `<button class="suggestion-btn" data-suggestion="${this.escapeHtml(suggestion)}">${this.escapeHtml(suggestion)}</button>`;
+      });
+      
+      html += `
+          </div>
+        </div>
+      `;
+    }
+
+    html += `
+          </div>
+          <div class="message-controls">
+            <button class="control-btn speaker-control" data-message-id="${messageId}" title="Read aloud">
+              <span class="speaker-icon">🔊</span>
+            </button>
+            <button class="control-btn copy-control" data-message-id="${messageId}" title="Copy message">
+              <span class="copy-icon">📋</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    return html;
+  }
+
+  // Helper functions for grades display
+  getGradeDisplay(currentGrade) {
+    if (!currentGrade || currentGrade === 'N/A') {
+      return { text: 'N/A', class: 'grade-na' };
+    }
+    
+    const grade = currentGrade.toString().toUpperCase();
+    
+    if (grade.includes('A')) return { text: grade, class: 'grade-a' };
+    if (grade.includes('B')) return { text: grade, class: 'grade-b' };
+    if (grade.includes('C')) return { text: grade, class: 'grade-c' };
+    if (grade.includes('D')) return { text: grade, class: 'grade-d' };
+    if (grade.includes('F')) return { text: grade, class: 'grade-f' };
+    
+    return { text: grade, class: 'grade-default' };
+  }
+
+  getGradeStatusIcon(workflowState) {
+    switch (workflowState) {
+      case 'graded': return '✅';
+      case 'submitted': return '📝';
+      case 'unsubmitted': return '❌';
+      case 'pending_review': return '⏳';
+      case 'ungraded': return '📋';
+      default: return '❓';
+    }
+  }
+
+  // Helper method: Render course comparison for structured course comparison data
+  renderCourseComparison(structuredResponse) {
+    const { data, message, suggestions } = structuredResponse;
+    const { courses, recommendations, comparison_title } = data;
+    
+    // Build the comparison title
+    let titleHtml = '';
+    if (comparison_title) {
+      titleHtml = `
+        <div class="comparison-title">
+          <h3>${this.escapeHtml(comparison_title)}</h3>
+        </div>
+      `;
+    }
+    
+    // Build course comparison sections
+    let coursesHtml = '';
+    courses.forEach((course, index) => {
+      const learningPoints = course.learning_points || [];
+      
+      let learningPointsHtml = '';
+      if (learningPoints.length > 0) {
+        learningPointsHtml = learningPoints.map(point => 
+          `<li class="learning-point">${this.escapeHtml(point)}</li>`
+        ).join('');
+      } else {
+        learningPointsHtml = '<li class="learning-point no-info">No specific information available</li>';
+      }
+      
+      coursesHtml += `
+        <div class="course-comparison-section">
+          <div class="course-comparison-header">
+            <h4 class="course-comparison-title">
+              ${index === 0 ? '📚' : '💻'} ${this.escapeHtml(course.course_name)}
+            </h4>
+            ${course.info_sources && course.info_sources.length > 0 ? 
+              `<span class="sources-count">${course.info_sources.length} source${course.info_sources.length > 1 ? 's' : ''}</span>` : ''
+            }
+          </div>
+          <div class="learning-objectives">
+            <p class="section-subtitle">What you'll learn and implement:</p>
+            <ul class="learning-points-list">
+              ${learningPointsHtml}
+            </ul>
+          </div>
+        </div>
+      `;
+    });
+    
+    // Build recommendations section
+    let recommendationsHtml = '';
+    if (recommendations && recommendations.length > 0) {
+      const recommendationCards = recommendations.map(rec => `
+        <div class="recommendation-card">
+          <div class="recommendation-header">
+            <h5 class="recommendation-title">${this.escapeHtml(rec.title)}</h5>
+            ${rec.course_preference && rec.course_preference !== 'both' && rec.course_preference !== 'consult_advisor' ? 
+              `<span class="course-preference">${this.escapeHtml(rec.course_preference)}</span>` : ''
+            }
+          </div>
+          <p class="recommendation-description">${this.escapeHtml(rec.description)}</p>
+        </div>
+      `).join('');
+      
+      recommendationsHtml = `
+        <div class="recommendations-section">
+          <h4 class="recommendations-title">💡 Course Selection Recommendations:</h4>
+          <div class="recommendations-grid">
+            ${recommendationCards}
+          </div>
+        </div>
+      `;
+    }
+    
+    // Build suggestions buttons if available
+    let suggestionsHtml = '';
+    if (suggestions && suggestions.length > 0) {
+      const suggestionButtons = suggestions.map((suggestion, index) => 
+        `<button class="suggestion-btn" data-suggestion="${this.escapeHtml(suggestion)}" data-index="${index}">${this.escapeHtml(suggestion)}</button>`
+      ).join('');
+      
+      suggestionsHtml = `
+        <div class="suggestions-section">
+          <p class="suggestions-title">💡 Try asking:</p>
+          <div class="suggestions-grid">
+            ${suggestionButtons}
+          </div>
+        </div>
+      `;
+    }
+    
+    // Generate unique message ID
+    const messageId = `msg-${++this.messageIdCounter}`;
+    
+    // Return the complete message HTML
+    return `
+      <div class="message bot" data-message-id="${messageId}">
+        <div class="bot-avatar" style="background-color: #8B0000; color: white; display: flex; justify-content: center; align-items: center;">S</div>
+        <div class="message-content">
+          <div class="course-comparison-response">
+            <p class="response-message">${this.escapeHtml(message)}</p>
+            ${titleHtml}
+            <div class="courses-comparison-grid">
+              ${coursesHtml}
+            </div>
+            ${recommendationsHtml}
+            ${suggestionsHtml}
+          </div>
+          <div class="message-controls">
+            <button class="control-btn speaker-control" data-message-id="${messageId}" title="Read aloud">
+              <span class="speaker-icon">🔊</span>
+            </button>
+            <button class="control-btn copy-control" data-message-id="${messageId}" title="Copy message">
+              <span class="copy-icon">📋</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Helper method: Render default message for non-structured responses
+  renderDefaultMessage(responseText) {
+    const responseHtml = this.convertUrlsToLinks(responseText || "Received a response but couldn't extract the message content.");
+    const messageId = `msg-${++this.messageIdCounter}`;
+    
+    return `
+      <div class="message bot" data-message-id="${messageId}">
+        <div class="bot-avatar" style="background-color: #8B0000; color: white; display: flex; justify-content: center; align-items: center;">S</div>
+        <div class="message-content">
+          <p>${responseHtml}</p>
+          <div class="message-controls">
+            <button class="control-btn speaker-control" data-message-id="${messageId}" title="Read aloud">
+              <span class="speaker-icon">🔊</span>
+            </button>
+            <button class="control-btn copy-control" data-message-id="${messageId}" title="Copy message">
+              <span class="copy-icon">📋</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Handle suggestion button clicks
+  handleSuggestionClick(suggestion) {
+    console.log('🔧 Suggestion clicked:', suggestion);
+    const input = document.querySelector('.chat-input input');
+    
+    if (input) {
+      // First, show the suggestion in the input field
+      input.value = suggestion;
+      console.log('✅ Input value set:', input.value);
+      
+      // Give a small delay to show the text, then send
+      setTimeout(() => {
+        this.sendMessage(suggestion);
+        input.value = ''; // Clear input after sending
+      }, 100);
+    } else {
+      console.error('❌ Input field not found!');
+    }
+  }
+
+  // Initialize voice recognition
+  initVoice() {
+    // Check if browser supports speech recognition
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
+    if (!SpeechRecognition) {
+      console.warn('🎤 Speech recognition not supported in this browser');
+      return;
+    }
+
+    this.recognition = new SpeechRecognition();
+    this.recognition.continuous = false;
+    this.recognition.interimResults = true;
+    this.recognition.lang = 'en-US';
+
+    this.recognition.onstart = () => {
+      console.log('🎤 Voice recording started');
+      this.isRecording = true;
+      this.updateVoiceButton();
+    };
+
+    this.recognition.onresult = (event) => {
+      let finalTranscript = '';
+      let interimTranscript = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript;
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+
+      const input = document.querySelector('.chat-input input');
+      if (input) {
+        input.value = finalTranscript + interimTranscript;
+      }
+
+      if (finalTranscript) {
+        console.log('🎤 Final transcript:', finalTranscript);
+        this.sendMessage(finalTranscript);
+        input.value = '';
+      }
+    };
+
+    this.recognition.onend = () => {
+      console.log('🎤 Voice recording ended');
+      this.isRecording = false;
+      this.updateVoiceButton();
+    };
+
+    this.recognition.onerror = (event) => {
+      console.error('🎤 Voice recognition error:', event.error);
+      this.isRecording = false;
+      this.updateVoiceButton();
+    };
+  }
+
+  // Toggle voice recording
+  toggleVoiceRecording() {
+    if (!this.recognition) {
+      alert('Voice recognition not supported in this browser');
+      return;
+    }
+
+    if (this.isRecording) {
+      this.recognition.stop();
+    } else {
+      this.recognition.start();
+    }
+  }
+
+  // Update voice button appearance
+  updateVoiceButton() {
+    const voiceBtn = document.querySelector('.voice-btn');
+    const voiceIcon = voiceBtn.querySelector('span');
+    
+    if (this.isRecording) {
+      voiceIcon.textContent = '🔴';
+      voiceIcon.style.color = '#dc3545';
+      voiceBtn.title = '🎤 Recording... (click to stop)';
+      voiceBtn.style.background = '#ffe6e6';
+    } else {
+      voiceIcon.textContent = '🎤';
+      voiceIcon.style.color = '#8B0000';
+      voiceBtn.title = 'Voice input';
+      voiceBtn.style.background = 'transparent';
+    }
+  }
+
+  // Speak text using text-to-speech
+  speakText(text) {
+    if (!this.speechSynthesis) {
+      return;
+    }
+
+    // Only speak if voice output is enabled
+    if (!this.voiceOutputEnabled) {
+      return;
+    }
+
+    // Cancel any ongoing speech
+    this.speechSynthesis.cancel();
+
+    // Clean text for speech (remove HTML tags, extra whitespace)
+    const cleanText = text
+      .replace(/<[^>]*>/g, '') // Remove HTML tags
+      .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+      .trim();
+
+    if (cleanText.length === 0) return;
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = 0.9;
+    utterance.pitch = 1;
+    utterance.volume = 0.8;
+
+    // Try to use a more natural voice
+    const voices = this.speechSynthesis.getVoices();
+    const preferredVoice = voices.find(voice => 
+      voice.name.includes('Google') && voice.lang.includes('en')
+    ) || voices.find(voice => voice.lang.includes('en'));
+    
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+    }
+
+    // Add event listeners for speech events
+    utterance.onstart = () => {
+      console.log('🔊 Speech started');
+    };
+    
+    utterance.onend = () => {
+      console.log('🔊 Speech ended');
+      if (this.currentSpeakingMessageId) {
+        this.updateSpeakerIcon(this.currentSpeakingMessageId, false);
+        this.currentSpeakingMessageId = null;
+      }
+    };
+    
+    utterance.onerror = () => {
+      console.log('🔊 Speech error');
+      if (this.currentSpeakingMessageId) {
+        this.updateSpeakerIcon(this.currentSpeakingMessageId, false);
+        this.currentSpeakingMessageId = null;
+      }
+    };
+
+    this.speechSynthesis.speak(utterance);
+    console.log('🔊 Speaking:', cleanText.substring(0, 50) + '...');
+  }
+
+  // Toggle speech for a specific message
+  toggleMessageSpeech(messageId) {
+    if (!this.speechSynthesis) {
+      alert('Speech synthesis not supported in this browser');
+      return;
+    }
+
+    // If this message is currently being spoken, stop it
+    if (this.currentSpeakingMessageId === messageId) {
+      this.speechSynthesis.cancel();
+      this.updateSpeakerIcon(messageId, false);
+      this.currentSpeakingMessageId = null;
+      console.log('🔊 Stopped speaking message:', messageId);
+      return;
+    }
+
+    // Stop any currently speaking message
+    if (this.currentSpeakingMessageId) {
+      this.speechSynthesis.cancel();
+      this.updateSpeakerIcon(this.currentSpeakingMessageId, false);
+    }
+
+    // Get the message content
+    const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (!messageElement) {
+      console.error('Message element not found:', messageId);
+      return;
+    }
+
+    // Extract text content for speaking
+    let textToSpeak = '';
+    const messageContent = messageElement.querySelector('.message-content');
+    
+    // Check if it's a structured response (assignments)
+    const assignmentsResponse = messageContent.querySelector('.assignments-response');
+    if (assignmentsResponse) {
+      // For structured responses, speak the main message
+      const responseMessage = assignmentsResponse.querySelector('.response-message');
+      textToSpeak = responseMessage ? responseMessage.textContent : 'Here is the information you requested.';
+    } else {
+      // For regular messages, speak the paragraph content
+      const paragraph = messageContent.querySelector('p');
+      textToSpeak = paragraph ? paragraph.textContent : messageContent.textContent;
+    }
+
+    // Clean and speak the text
+    const cleanText = textToSpeak
+      .replace(/<[^>]*>/g, '') // Remove HTML tags
+      .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+      .trim();
+
+    if (cleanText.length === 0) {
+      console.error('No text to speak for message:', messageId);
+      return;
+    }
+
+    // Set up speech
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = 0.9;
+    utterance.pitch = 1;
+    utterance.volume = 0.8;
+
+    // Try to use a more natural voice
+    const voices = this.speechSynthesis.getVoices();
+    const preferredVoice = voices.find(voice => 
+      voice.name.includes('Google') && voice.lang.includes('en')
+    ) || voices.find(voice => voice.lang.includes('en'));
+    
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+    }
+
+    // Set up event listeners
+    utterance.onstart = () => {
+      this.currentSpeakingMessageId = messageId;
+      this.updateSpeakerIcon(messageId, true);
+      console.log('🔊 Started speaking message:', messageId);
+    };
+    
+    utterance.onend = () => {
+      this.updateSpeakerIcon(messageId, false);
+      this.currentSpeakingMessageId = null;
+      console.log('🔊 Finished speaking message:', messageId);
+    };
+    
+    utterance.onerror = () => {
+      this.updateSpeakerIcon(messageId, false);
+      this.currentSpeakingMessageId = null;
+      console.log('🔊 Error speaking message:', messageId);
+    };
+
+    // Start speaking
+    this.speechSynthesis.speak(utterance);
+  }
+
+  // Update speaker icon based on speaking state
+  updateSpeakerIcon(messageId, isSpeaking) {
+    const speakerBtn = document.querySelector(`.speaker-control[data-message-id="${messageId}"]`);
+    if (!speakerBtn) return;
+
+    const icon = speakerBtn.querySelector('.speaker-icon');
+    if (isSpeaking) {
+      icon.textContent = '🔇';
+      speakerBtn.title = 'Stop reading';
+      speakerBtn.style.background = '#ffe6e6';
+    } else {
+      icon.textContent = '🔊';
+      speakerBtn.title = 'Read aloud';
+      speakerBtn.style.background = 'transparent';
+    }
+  }
+
+  // Copy message content to clipboard
+  async copyMessage(messageId) {
+    const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (!messageElement) {
+      console.error('Message element not found:', messageId);
+      return;
+    }
+
+    const messageContent = messageElement.querySelector('.message-content');
+    let textToCopy = '';
+
+    // Check if it's a structured response (assignments)
+    const assignmentsResponse = messageContent.querySelector('.assignments-response');
+    if (assignmentsResponse) {
+      // For structured responses, copy a formatted version
+      const responseMessage = assignmentsResponse.querySelector('.response-message');
+      textToCopy = responseMessage ? responseMessage.textContent : '';
+      
+      // Add course information
+      const courseSections = assignmentsResponse.querySelectorAll('.course-section');
+      courseSections.forEach(section => {
+        const courseTitle = section.querySelector('.course-title');
+        if (courseTitle) {
+          textToCopy += '\n\n' + courseTitle.textContent + ':\n';
+          
+          const assignments = section.querySelectorAll('.assignment-card');
+          assignments.forEach(assignment => {
+            const name = assignment.querySelector('.assignment-name');
+            const dueDate = assignment.querySelector('.due-date');
+            if (name && dueDate) {
+              textToCopy += '• ' + name.textContent + ' - ' + dueDate.textContent + '\n';
+            }
+          });
+        }
+      });
+    } else {
+      // For regular messages, copy the paragraph content
+      const paragraph = messageContent.querySelector('p');
+      textToCopy = paragraph ? paragraph.textContent : messageContent.textContent;
+    }
+
+    // Clean up the text
+    textToCopy = textToCopy.replace(/\s+/g, ' ').trim();
+
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      
+      // Show feedback
+      const copyBtn = document.querySelector(`.copy-control[data-message-id="${messageId}"]`);
+      const originalIcon = copyBtn.querySelector('.copy-icon').textContent;
+      const originalTitle = copyBtn.title;
+      
+      copyBtn.querySelector('.copy-icon').textContent = '✅';
+      copyBtn.title = 'Copied!';
+      copyBtn.style.background = '#e8f5e9';
+      
+      // Reset after 2 seconds
+      setTimeout(() => {
+        copyBtn.querySelector('.copy-icon').textContent = originalIcon;
+        copyBtn.title = originalTitle;
+        copyBtn.style.background = 'transparent';
+      }, 2000);
+      
+      console.log('📋 Copied message:', messageId);
+    } catch (err) {
+      console.error('Failed to copy text:', err);
+      alert('Failed to copy to clipboard');
+    }
+  }
+
+
   
   async sendMessage(message) {
     const messagesContainer = document.querySelector('.chat-messages');
@@ -153,7 +1308,7 @@ class ChatBot {
       <div class="message bot loading">
         <div class="bot-avatar" style="background-color: #8B0000; color: white; display: flex; justify-content: center; align-items: center;">S</div>
         <div class="message-content">
-          <p>Typing...</p>
+          <p>Thinking...</p>
         </div>
       </div>
     `;
@@ -199,19 +1354,60 @@ class ChatBot {
         loadingMessage.remove();
       }
       
-      // Process response text to convert URLs to links
-      const responseHtml = this.convertUrlsToLinks(data.response || "Received a response but couldn't extract the message content.");
+      // Check if response is structured JSON
+      let botMessageHtml;
+      try {
+        const structuredResponse = JSON.parse(data.response);
+        
+        if (structuredResponse.response_type === 'assignments') {
+          // Render assignment cards
+          console.log('🎯 Rendering assignment cards');
+          botMessageHtml = this.renderAssignmentCards(structuredResponse);
+        } else if (structuredResponse.response_type === 'announcements') {
+          // Render announcements cards
+          console.log('📢 Rendering announcements cards');
+          botMessageHtml = this.renderAnnouncementsCards(structuredResponse);
+        } else if (structuredResponse.response_type === 'grades') {
+          // Render grades cards
+          console.log('📊 Rendering grades cards');
+          botMessageHtml = this.renderGradesCards(structuredResponse);
+        } else if (structuredResponse.response_type === 'course_comparison') {
+          // Render course comparison
+          console.log('🔍 Rendering course comparison');
+          botMessageHtml = this.renderCourseComparison(structuredResponse);
+        } else {
+          // Handle other structured response types in the future
+          botMessageHtml = this.renderDefaultMessage(data.response);
+        }
+      } catch (e) {
+        // Not structured JSON, render as normal text
+        console.log('📝 Rendering as plain text');
+        botMessageHtml = this.renderDefaultMessage(data.response);
+      }
       
       // Add bot reply
-      const botMessageHtml = `
-        <div class="message bot">
-          <div class="bot-avatar" style="background-color: #8B0000; color: white; display: flex; justify-content: center; align-items: center;">S</div>
-          <div class="message-content">
-            <p>${responseHtml}</p>
-          </div>
-        </div>
-      `;
       messagesContainer.insertAdjacentHTML('beforeend', botMessageHtml);
+      
+              // Handle automatic voice output (only if global toggle is enabled)
+      if (this.voiceOutputEnabled && !this.currentSpeakingMessageId) {
+        try {
+          const parsedResponse = JSON.parse(data.response);
+          if (!parsedResponse.response_type) {
+            // Plain text response
+            this.speakText(data.response);
+            console.log('🔊 Global voice output: speaking full response');
+          } else {
+            // Structured response (like assignments) - speak summary
+            const message = parsedResponse.message || "Here's the information you requested.";
+            this.speakText(message);
+            console.log('🔊 Global voice output: speaking summary');
+          }
+        } catch (e) {
+          // Not JSON, plain text
+          this.speakText(data.response);
+          console.log('🔊 Global voice output: speaking text response');
+        }
+      }
       
       // Scroll to bottom
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -244,4 +1440,4 @@ class ChatBot {
 }
 
 // 初始化聊天机器人，在所有页面上显示
-new ChatBot(); 
+window.chatBot = new ChatBot(); 
